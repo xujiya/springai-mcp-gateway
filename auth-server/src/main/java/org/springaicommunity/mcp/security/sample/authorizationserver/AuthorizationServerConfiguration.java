@@ -2,11 +2,13 @@ package org.springaicommunity.mcp.security.sample.authorizationserver;
 
 import java.util.List;
 
+import org.springaicommunity.mcp.security.authorizationserver.repository.MybatisUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
+import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -43,6 +45,11 @@ class AuthorizationServerConfiguration {
 		return web -> web.ignoring().requestMatchers(
 				"/oauth2/auth-info"
 		);
+	}
+
+	@Bean
+	UserDetailsService userDetailsService(MybatisUserDetailsService mybatisUserDetailsService) {
+		return mybatisUserDetailsService;
 	}
 
 	public CorsConfigurationSource corsConfigurationSource() {

@@ -18,42 +18,26 @@ spring:
   application:
     name: auth-server
 
+  datasource:
+    url: jdbc:mysql://localhost:3306/mcp_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: root
+    password: xujiya
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  sql:
+    init:
+      mode: always
+
   security:
     oauth2:
       authorizationserver:
         issuer: http://localhost:8080/api-gateway/ecso/auth
-        client:
-          springai-gateway-client:
-            token:
-              access-token-time-to-live: 1h
-              refresh-token-time-to-live: 30d
-            registration:
-              client-id: "springai-gateway-client"
-              client-name: "Spring AI MCP Gateway"
-              client-secret: "{bcrypt}$2b$10$ABsfnCtp6Hkmzsk4myJCee0MHC/ogOWXR/DPKQMDI0VLXakrvKo46"
-              client-authentication-methods:
-                - "client_secret_post"
-                - "client_secret_basic"
-              authorization-grant-types:
-                - "authorization_code"
-                - "client_credentials"
-                - "refresh_token"
-              scopes:
-                - "offline_access"
-                - "mcp:read"
-                - "mcp:write"
-              redirect-uris:
-                - "http://localhost:6274/oauth/callback"
-                - "https://claude.ai/api/mcp/auth_callback"
-                - "http://localhost:8080/login/oauth2/code/authserver"
-                - "http://127.0.0.1:8080/login/oauth2/code/authserver"
-              require-authorization-consent: false
-              require-proof-key-for-code-exchange: true
-    user:
-      name: admin
-      password: admin
 
-
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  global-config:
+    db-config:
+      id-type: ASSIGN_ID
 
 logging:
   level:

@@ -37,8 +37,11 @@ public class SecurityConfiguration {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                // Enforce authentication with token on EVERY request
-                .authorizeHttpRequests(auth -> auth.anyRequest().authenticated())
+                // Allow .well-known endpoints without authentication (RFC 9728: clients
+                // must discover authorization servers before they have a token)
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/*/.well-known/oauth-protected-resource").permitAll()
+                        .anyRequest().authenticated())
                 // Configure OAuth2 on the MCP server
                 .with(
                         McpServerOAuth2Configurer.mcpServerOAuth2(),

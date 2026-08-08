@@ -16,6 +16,8 @@
 
 package org.springaicommunity.mcp.security.sample.authorizationserver;
 
+import org.apache.ibatis.annotations.Mapper;
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
@@ -24,7 +26,8 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  *
  * @author Daniel Garnier-Moiroux
  */
-@SpringBootApplication
+@SpringBootApplication(scanBasePackages = "org.springaicommunity.mcp.security")
+@MapperScan("org.springaicommunity.mcp.security.authorizationserver.mapper")
 public class SampleAuthorizationServerApplication {
 
 	public static void main(String[] args) {
