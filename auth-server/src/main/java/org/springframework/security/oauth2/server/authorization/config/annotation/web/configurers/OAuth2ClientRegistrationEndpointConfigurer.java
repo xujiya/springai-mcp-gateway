@@ -24,6 +24,7 @@ import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
 import org.springframework.security.oauth2.server.authorization.OAuth2ClientRegistration;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2ClientRegistrationAuthenticationProvider;
@@ -133,12 +134,30 @@ public final class OAuth2ClientRegistrationEndpointConfigurer
 					.refreshTokenTimeToLive(this.refreshTokenTimeToLive)
 					.reuseRefreshTokens(false);
 
-			return RegisteredClient.from(registeredClient)
-				.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
-				// claude code does client_secret_post + PKCE
-				.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
-				// Security: Do NOT add 'none' for DCR clients — they must authenticate with secret
-				// clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+			// ═══ SECURITY: Two-tier client model ═══
+			// DCR-registered clients: authorization_code + refresh_token ONLY (never client_credentials)
+			//   → attacker can register but CANNOT get token without user login
+			// Pre-registered clients (application.yml): admin-controlled, may have client_credentials
+			// ═══════════════════════════════════════════
+
+			boolean isPublicClient = registeredClient.getClientAuthenticationMethods()
+				.contains(ClientAuthenticationMethod.NONE);
+
+			RegisteredClient.Builder reb = RegisteredClient.from(registeredClient);
+
+			if (isPublicClient) {
+				// Public client (none/PKCE): no secret, no client_credentials
+				reb.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+					.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
+			} else {
+				// Confidential client: force secret auth + authorization_code only
+				reb.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
+					.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
+					.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+					.authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN);
+			}
+
+			return reb
 				.clientSettings(clientSettingsBuilder.build())
 				.tokenSettings(tokenSettingsBuilder.build())
 				.build();
@@ -158,6 +177,14 @@ public final class OAuth2ClientRegistrationEndpointConfigurer
 			ClientSettings clientSettings = registeredClient.getClientSettings();
 			if (getResourceIds(clientSettings) != null) {
 				claims.put(RESOURCE_IDS_KEY, getResourceIds(clientSettings));
+			}
+			// Security: Strip client_credentials from DCR response grant_types
+			// DCR clients never have client_credentials; only pre-registered (admin) clients do
+			Object grantTypes = claims.get("grant_types");
+			if (grantTypes instanceof java.util.List<?> list) {
+				claims.put("grant_types", list.stream()
+					.filter(gt -> !AuthorizationGrantType.CLIENT_CREDENTIALS.getValue().equals(gt))
+					.toList());
 			}
 			return OAuth2ClientRegistration.withClaims(claims).build();
 		}

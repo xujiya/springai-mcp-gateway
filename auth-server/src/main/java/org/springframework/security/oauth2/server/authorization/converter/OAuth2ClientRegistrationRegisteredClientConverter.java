@@ -18,6 +18,7 @@ package org.springframework.security.oauth2.server.authorization.converter;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -92,9 +93,19 @@ public final class OAuth2ClientRegistrationRegisteredClientConverter
 				redirectUris.addAll(clientRegistration.getRedirectUris()));
 
 		if (!CollectionUtils.isEmpty(clientRegistration.getGrantTypes())) {
-			builder.authorizationGrantTypes((authorizationGrantTypes) ->
-					clientRegistration.getGrantTypes().forEach((grantType) ->
+			// Security: DCR must NOT allow client_credentials — only authorization_code + refresh_token
+			// client_credentials is reserved for pre-registered (admin-controlled) clients
+			List<String> allowedGrantTypes = clientRegistration.getGrantTypes().stream()
+				.filter(grantType -> !AuthorizationGrantType.CLIENT_CREDENTIALS.getValue().equals(grantType))
+				.toList();
+			if (!allowedGrantTypes.isEmpty()) {
+				builder.authorizationGrantTypes((authorizationGrantTypes) ->
+						allowedGrantTypes.forEach((grantType) ->
 							authorizationGrantTypes.add(new AuthorizationGrantType(grantType))));
+			} else {
+				// All requested grant types were filtered (e.g. only client_credentials) → default to authorization_code
+				builder.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE);
+			}
 		}
 		else {
 			builder.authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE);
@@ -121,7 +132,12 @@ public final class OAuth2ClientRegistrationRegisteredClientConverter
 				.clientSettings(clientSettingsBuilder.build());
 
 		// Security: DCR-registered client secrets expire after configurable duration (default 90 days)
-		builder.clientSecretExpiresAt(Instant.now().plus(this.clientSecretExpiresIn));
+		// Only set for confidential clients (public clients with 'none' have no secret)
+		boolean isPublicClient = ClientAuthenticationMethod.NONE.getValue()
+			.equals(clientRegistration.getTokenEndpointAuthenticationMethod());
+		if (!isPublicClient) {
+			builder.clientSecretExpiresAt(Instant.now().plus(this.clientSecretExpiresIn));
+		}
 
 		return builder.build();
 		// @formatter:on

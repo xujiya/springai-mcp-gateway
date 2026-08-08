@@ -11,7 +11,7 @@ server:
 mcp:
   dcr:
     client-secret-expires-in: 90d    # How long DCR client secrets remain valid (default: 90d)
-    access-token-time-to-live: 5m    # Access token TTL for DCR-registered clients (default: 5m)
+    access-token-time-to-live: 24h   # Access token TTL for DCR-registered clients (default: 5m)
     refresh-token-time-to-live: 1h   # Refresh token TTL for DCR-registered clients (default: 1h)
 
 spring:
