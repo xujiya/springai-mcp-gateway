@@ -1,6 +1,5 @@
 package es.omarall.mcp.gateway;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.ai.tool.ToolCallback;
@@ -10,18 +9,28 @@ import org.springframework.lang.Nullable;
 
 /**
  * ToolCallback wrapper that applies a prefix to tool names to avoid collisions.
+ * <p>
+ * In ALIAS mode: {alias}{delimiter}{toolName} (e.g. "weather_getAlerts")
+ * In STATIC mode: {staticPrefix}{delimiter}{toolName} (e.g. "gw_getAlerts")
+ * In NONE mode: toolName unchanged (not wrapped, see GatewayProvidersConfig)
  */
 @Slf4j
-@RequiredArgsConstructor
 public class PrefixedToolCallback implements ToolCallback {
 
     private final ToolCallback delegate;
     private final McpGatewayProperties props;
+    private final String alias;
+
+    public PrefixedToolCallback(ToolCallback delegate, McpGatewayProperties props, String alias) {
+        this.delegate = delegate;
+        this.props = props;
+        this.alias = alias;
+    }
 
     @Override
     public ToolDefinition getToolDefinition() {
         ToolDefinition td = delegate.getToolDefinition();
-        String mappedName = mapName(props, "gw", td.name());
+        String mappedName = mapName(td.name());
         log.trace("Mapping tool name '{}' to '{}'", td.name(), mappedName);
         return new PrefixedToolDefinition(
                 mappedName,
@@ -32,7 +41,6 @@ public class PrefixedToolCallback implements ToolCallback {
 
     @Override
     public ToolMetadata getToolMetadata() {
-        // Return tool metadata as is
         return delegate.getToolMetadata();
     }
 
@@ -49,12 +57,8 @@ public class PrefixedToolCallback implements ToolCallback {
 
     /**
      * Maps the tool name according to the configured prefix mode.
-     * @param props gateway properties
-     * @param alias alias to use if ALIAS mode
-     * @param toolName original tool name
-     * @return mapped tool name
      */
-    private String mapName(McpGatewayProperties props, String alias, String toolName) {
+    private String mapName(String toolName) {
         return switch (props.getPrefixMode()) {
             case NONE -> toolName;
             case STATIC -> props.getStaticPrefix() + props.getDelimiter() + toolName;

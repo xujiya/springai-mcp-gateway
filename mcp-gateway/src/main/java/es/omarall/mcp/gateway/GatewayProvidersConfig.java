@@ -17,6 +17,10 @@ import java.util.List;
 
 /**
  * Spring Boot configuration for registering ToolCallback providers for the gateway.
+ * <p>
+ * In ALIAS mode, tool names are prefixed with the MCP client connection name
+ * (e.g. "weather_getAlerts", "climate_getStormWarnings") to avoid collisions
+ * when multiple backends expose tools with the same original name.
  */
 @Slf4j
 @SpringBootConfiguration
@@ -37,21 +41,36 @@ public class GatewayProvidersConfig {
             McpGatewayProperties props) {
 
         log.info("Registering ToolCallbackProvider with {} sync and {} async clients", mcpClients.size(), mcpAsyncClients.size());
+
         final List<ToolCallback> tcs = new ArrayList<>(mcpClients.stream()
-                .flatMap(mcpClient -> mcpClient.listTools()
-                        .tools()
-                        .stream()
-                        .map(tool -> new SyncMcpToolCallback(mcpClient, tool)))
-                .map(tc -> new PrefixedToolCallback(tc, props))
+                .flatMap(mcpClient -> {
+                    // Use the client connection name as alias (e.g. "weather", "climate")
+                    String alias = mcpClient.getClientInfo().name();
+                    return mcpClient.listTools()
+                            .tools()
+                            .stream()
+                            .map(tool -> new SyncMcpToolCallback(mcpClient, tool))
+                            .map(tc -> wrap(tc, alias, props));
+                })
                 .toList());
 
         ToolCallbackProvider asyncToolCallbackProvider = new AsyncMcpToolCallbackProvider(mcpAsyncClients);
         Arrays.stream(asyncToolCallbackProvider.getToolCallbacks()).forEach(tc -> {
-            ToolCallback t = new PrefixedToolCallback(tc, props);
+            // For async clients, use client info name as alias
+            String alias = mcpAsyncClients.isEmpty() ? "async" :
+                    mcpAsyncClients.get(0).getClientInfo().name();
+            ToolCallback t = wrap(tc, alias, props);
             tcs.add(t);
         });
 
         log.debug("Total ToolCallbacks registered: {}", tcs.size());
         return ToolCallbackProvider.from(tcs);
+    }
+
+    private ToolCallback wrap(ToolCallback tc, String alias, McpGatewayProperties props) {
+        if (props.getPrefixMode() == McpGatewayProperties.PrefixMode.NONE) {
+            return tc;
+        }
+        return new PrefixedToolCallback(tc, props, alias);
     }
 }

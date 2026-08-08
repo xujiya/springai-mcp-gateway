@@ -1,0 +1,18 @@
+server:
+  port: 9093
+
+spring:
+  application:
+    name: climate-server
+  ai:
+    mcp:
+      server:
+        name: climate-server
+        version: 1.0.0
+        protocol: STREAMABLE
+
+logging:
+  level:
+    es.omarall: DEBUG
+    io.modelcontextprotocol: INFO
+    org.springframework.ai: INFO

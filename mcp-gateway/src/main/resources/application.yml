@@ -14,6 +14,8 @@ spring:
         enabled: true
         name: mcp-client
         version: 1.0.0
+        toolcallback:
+          enabled: false   # Use our GatewayProvidersConfig @Primary provider instead
         request-timeout: 30s
         sse:
           connections: {}
@@ -21,6 +23,8 @@ spring:
           connections:
             weather:
               url: http://localhost:9092/mcp
+            climate:
+              url: http://localhost:9093/mcp
         stdio:
           root-change-notification: false
           connections: {}
@@ -82,7 +86,7 @@ spring:
 
 mcp:
   gateway:
-    prefixMode: STATIC     # NONE | STATIC | ALIAS
+    prefixMode: ALIAS     # NONE | STATIC | ALIAS  — ALIAS: {connectionName}_{toolName}
     delimiter: "_"
     staticPrefix: "gw"
 
