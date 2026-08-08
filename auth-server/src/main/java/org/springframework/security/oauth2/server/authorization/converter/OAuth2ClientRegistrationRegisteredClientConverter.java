@@ -108,6 +108,9 @@ public final class OAuth2ClientRegistrationRegisteredClientConverter
 		builder
 				.clientSettings(clientSettingsBuilder.build());
 
+		// Security: DCR-registered client secrets expire after 90 days
+		builder.clientSecretExpiresAt(Instant.now().plus(java.time.Duration.ofDays(90)));
+
 		return builder.build();
 		// @formatter:on
 	}

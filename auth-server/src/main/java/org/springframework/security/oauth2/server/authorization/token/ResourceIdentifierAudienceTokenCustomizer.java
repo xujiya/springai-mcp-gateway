@@ -60,9 +60,11 @@ public class ResourceIdentifierAudienceTokenCustomizer implements OAuth2TokenCus
 			String resource = (String) clientCredentialsAuthentication.getAdditionalParameters()
 				.get(RESOURCE_PARAM_NAME);
 
-			context.getClaims().claim(JwtClaimNames.AUD, resource);
+			// Security: Only add 'aud' claim if resource parameter is present
+			if (resource != null) {
+				context.getClaims().claim(JwtClaimNames.AUD, resource);
+			}
 		}
-
 	}
 
 }

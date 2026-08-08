@@ -81,12 +81,22 @@ public final class OAuth2ClientRegistrationEndpointConfigurer
 				clientSettingsBuilder.setting(CLIENT_SETTINGS_NAMESPACE.concat(RESOURCE_IDS_KEY),
 						clientRegistration.getClaims().get(RESOURCE_IDS_KEY));
 			}
+
+			// Security: DCR-registered clients get short-lived tokens (5 minutes) and rotating refresh tokens
+			org.springframework.security.oauth2.server.authorization.settings.TokenSettings.Builder tokenSettingsBuilder =
+				org.springframework.security.oauth2.server.authorization.settings.TokenSettings.withSettings(registeredClient.getTokenSettings().getSettings())
+					.accessTokenTimeToLive(java.time.Duration.ofMinutes(5))
+					.refreshTokenTimeToLive(java.time.Duration.ofHours(1))
+					.reuseRefreshTokens(false);
+
 			return RegisteredClient.from(registeredClient)
 				.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
 				// claude code does client_secret_post + PKCE
 				.clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_POST)
-				.clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+				// Security: Do NOT add 'none' for DCR clients — they must authenticate with secret
+				// clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
 				.clientSettings(clientSettingsBuilder.build())
+				.tokenSettings(tokenSettingsBuilder.build())
 				.build();
 		}
 
