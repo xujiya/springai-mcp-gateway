@@ -1,0 +1,136 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: api-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:9090
+  cloud:
+    gateway:
+      preserve-host-header: true
+      routes:
+        # ─── RFC 8414 well-known-first 形式 ───
+        # 部分 MCP 客户端使用 <origin>/.well-known/oauth-authorization-server/<issuer-path>
+        # 来发现 AS 元数据。该路由将请求重写到标准 .well-known 路径后
+        # 转发到 auth-server，统一走网关出网。
+        - id: rfc8414-well-known-first
+          uri: http://localhost:9090
+          predicates:
+            - Path=/.well-known/oauth-authorization-server/**
+          filters:
+            - RewritePath=/.well-known/oauth-authorization-server/.*, /.well-known/openid-configuration
+            - RewriteAuthUrls=http://localhost:9090,http://localhost:8080/api-gateway/ecso/auth
+
+        # ─── Auth Server 路由 ───
+
+        # ① .well-known 元数据 — 公开
+        - id: auth-well-known
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/.well-known/**
+          filters:
+            - StripPrefix=2
+            - RewriteAuthUrls=http://localhost:9090,http://localhost:8080/api-gateway/ecso/auth
+
+        # ② DCR 注册 — 公开
+        - id: auth-register
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/register
+          filters:
+            - StripPrefix=2
+
+        # ③ Token 端点 — 公开
+        - id: auth-token
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/token
+          filters:
+            - StripPrefix=2
+
+        # ④-bis JWKS — 公开
+        - id: auth-jwks
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/jwks
+          filters:
+            - StripPrefix=2
+
+        # ④ 授权端点 — 公开 (浏览器重定向)
+        # RewriteResponseHeader 是 post-filter, 逆序执行, 所以:
+        #   - 通用模式先声明(后执行), vue-login 特殊模式后声明(先执行)
+        - id: auth-authorize
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/authorize
+          filters:
+            - StripPrefix=2
+            - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
+            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
+
+        # ⑤ Login POST — 公开 (登录成功后 302 重定向)
+        - id: auth-login
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/login
+          filters:
+            - StripPrefix=2
+            - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
+            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
+
+        # ⑥ auth-info API — 公开
+        - id: auth-info
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/auth-info
+          filters:
+            - StripPrefix=2
+
+        # ⑦ Vue 登录页 — 公开（nginx 剥了 /api-gateway/，需加回前缀给 Vite）
+        - id: vue-login
+          uri: http://localhost:9091
+          predicates:
+            - Path=/ecso/vue
+          filters:
+            - RewritePath=/ecso/vue, /api-gateway/ecso/vue/
+
+        # ⑧ Vue 子路由 & 静态资源 — 公开
+        - id: vue-assets
+          uri: http://localhost:9091
+          predicates:
+            - Path=/ecso/vue/**
+          filters:
+            - RewritePath=/ecso/vue/(?<path>.*), /api-gateway/ecso/vue/$\{path}
+
+        # ⑨ 兜底: 其他 /ecso/auth/** 需认证 (也可能返回 302)
+        - id: auth-other
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/**
+          filters:
+            - StripPrefix=2
+            - RewriteAuthUrls=http://localhost:9090,http://localhost:8080/api-gateway/ecso/auth
+            - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
+            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
+
+ecso:
+  whitelist:
+    paths:
+      - /.well-known/oauth-authorization-server/**
+      - /ecso/auth/.well-known/**
+      - /ecso/auth/oauth2/register
+      - /ecso/auth/oauth2/token
+      - /ecso/auth/oauth2/authorize
+      - /ecso/auth/oauth2/jwks
+      - /ecso/auth/login
+      - /ecso/auth/oauth2/auth-info
+      - /ecso/vue/**
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    es.omarall: DEBUG

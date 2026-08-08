@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>org.springaicommunity</groupId>
+  <artifactId>mcp-authorization-server</artifactId>
+  <version>0.0.3</version>
+  <name>Spring AI Community - MCP-compatible authorization server</name>
+  <description>Security extras for Spring Authorization server,
+        to provide support for the MCP authorization spec, including
+        OAuth2 dynamic client registration and resource identifiers.</description>
+  <url>https://github.com/spring-ai-community/mcp-security</url>
+  <organization>
+    <name>Spring AI Community</name>
+    <url>https://github.com/spring-ai-community</url>
+  </organization>
+  <licenses>
+    <license>
+      <name>Apache License</name>
+      <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <id>kehrlann</id>
+      <name>Daniel Garnier-Moiroux</name>
+      <email>git@garnier.wf</email>
+    </developer>
+  </developers>
+  <scm>
+    <connection>git://github.com/spring-ai-community/mcp-security.git</connection>
+    <developerConnection>git@github.com/spring-ai-community/mcp-security.git</developerConnection>
+    <url>https://github.com/spring-ai-community/mcp-security</url>
+  </scm>
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-oauth2-authorization-server</artifactId>
+      <version>1.5.1</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.security</groupId>
+      <artifactId>spring-security-config</artifactId>
+      <version>6.5.2</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet</groupId>
+      <artifactId>jakarta.servlet-api</artifactId>
+      <version>6.0.0</version>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+</project>

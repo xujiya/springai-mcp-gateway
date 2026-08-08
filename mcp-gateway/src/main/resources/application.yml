@@ -1,5 +1,6 @@
 server:
-  port: 8080
+  port: 8082
+  forward-headers-strategy: framework
 spring:
   application:
     name: springai-mcp-gateway
@@ -15,70 +16,81 @@ spring:
         version: 1.0.0
         request-timeout: 30s
         sse:
+          connections: {}
+        streamable-http:
           connections:
-            jetbrains:
-              url: http://localhost:64342
-              sse-endpoint: /sse
+            weather:
+              url: http://localhost:9092/mcp
         stdio:
           root-change-notification: false
-          connections:
-            memory:
-              command: docker
-              args:
-                - run
-                - -i
-                - --rm
-                - --volume
-                - /home/omar/.mcp-memory-data:/data
-                - mcp/memory
-                - /data
-              env:
-                MEMORY_STORAGE_PATH: /data
-                MEMORY_MAX_ENTRIES: "10000"
-            #            duckduckgo:
-            #              command: docker
-            #              args:
-            #                - run
-            #                - -i
-            #                - --rm
-            #                - mcp/duckduckgo
-            #            paper-search:
-            #              command: docker
-            #              args:
-            #                - run
-            #                - -i
-            #                - --rm
-            #                - mcp/paper-search
-            #              env:
-            #                PAPER_SEARCH_TIMEOUT_SECONDS: "30"
-            sequential-thinking:
-              command: docker
-              args:
-                - run
-                - -i
-                - --rm
-                - mcp/sequentialthinking
-  #            mcp-fetch:
-  #              command: docker
-  #              args:
-  #                - run
-  #                - -i
-  #                - --rm
-  #                - mcp/fetch
-  #              env:
-  #                FETCH_MAX_REQUESTS_PER_MINUTE: "30"
-  #                FETCH_TIMEOUT_SECONDS: "30"
+          connections: {}
+        #  stdio:
+        #    root-change-notification: false
+        #    connections:
+        #      memory:
+        #        command: docker
+        #        args:
+        #          - run
+        #          - -i
+        #          - --rm
+        #          - --volume
+        #          - /home/omar/.mcp-memory-data:/data
+        #          - mcp/memory
+        #          - /data
+        #        env:
+        #          MEMORY_STORAGE_PATH: /data
+        #          MEMORY_MAX_ENTRIES: "10000"
+        #      #            duckduckgo:
+        #      #              command: docker
+        #      #              args:
+        #      #                - run
+        #      #                - -i
+        #      #                - --rm
+        #      #                - mcp/duckduckgo
+        #      #            paper-search:
+        #      #              command: docker
+        #      #              args:
+        #      #                - run
+        #      #                - -i
+        #      #                - --rm
+        #      #                - mcp/paper-search
+        #      #              env:
+        #      #                PAPER_SEARCH_TIMEOUT_SECONDS: "30"
+        #      sequential-thinking:
+        #        command: docker
+        #        args:
+        #          - run
+        #          - -i
+        #          - --rm
+        #          - mcp/sequentialthinking
+        #  #            mcp-fetch:
+        #  #              command: docker
+        #  #              args:
+        #  #                - run
+        #  #                - -i
+        #  #                - --rm
+        #  #                - mcp/fetch
+        #  #              env:
+        #  #                FETCH_MAX_REQUESTS_PER_MINUTE: "30"
+        #  #                FETCH_TIMEOUT_SECONDS: "30"
   security:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: https://dev.omarall.es # "https://dev.omarall.es" # http://localhost:9090
+          issuer-uri: http://localhost:8080/api-gateway/ecso/auth
+          jwk-set-uri: http://localhost:9090/oauth2/jwks
 
 mcp:
   gateway:
     prefixMode: STATIC     # NONE | STATIC | ALIAS
     delimiter: "_"
     staticPrefix: "gw"
+
+ecso:
+  auth-server:
+    public-url: http://localhost:8080/api-gateway/ecso/auth
+  mcp-server:
+    public-url: http://localhost:8080/mcp-gateway
 
 logging:
   level:

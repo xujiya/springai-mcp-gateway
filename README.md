@@ -104,3 +104,62 @@ Important security notes:
 * https://blog.christianposta.com/understanding-mcp-authorization-step-by-step-part-three/
 * https://blog.christianposta.com/understanding-mcp-authorization-with-dynamic-client-registration/
 * https://blog.christianposta.com/api-keys-are-a-bad-idea-for-enterprise-llm-agent-and-mcp-access/
+
+worker_processes  1;
+pid        logs/nginx.pid;
+error_log  logs/error.log;
+
+events {
+worker_connections  1024;
+}
+
+http {
+include       mime.types;
+default_type  application/octet-stream;
+sendfile      on;
+keepalive_timeout  65;
+
+    server {
+        listen       8080;
+        server_name  _;
+
+        proxy_set_header Host              $host:$server_port;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Host  $host;
+        proxy_set_header X-Forwarded-Port  $server_port;
+
+        # ─── RFC 8414 AS 发现: /.well-known/oauth-authorization-server/**
+        #     MCP 客户端按 RFC 8414 标准:
+        #     GET <origin>/.well-known/oauth-authorization-server/<issuer_path>
+        #     例: GET /.well-known/oauth-authorization-server/api-gateway/ecso/auth
+        #     需转发到 api-gateway 处理 (网关有 rfc8414 路由做 RewritePath)
+        location /.well-known/ {
+            proxy_pass http://127.0.0.1:8081;
+        }
+
+        # ─── /api-gateway/** → api-gateway (8081) ───
+        location /api-gateway/ {
+            proxy_set_header X-Forwarded-Prefix /api-gateway;
+            proxy_pass http://127.0.0.1:8081/;
+        }
+
+        # ─── /mcp-gateway/** → mcp-gateway (8082) ───
+        location /mcp-gateway/ {
+            proxy_set_header X-Forwarded-Prefix /mcp-gateway;
+            proxy_pass http://127.0.0.1:8082/;
+            proxy_read_timeout  3600s;
+            proxy_send_timeout  3600s;
+        }
+
+        location / {
+            default_type text/html;
+            return 200 '<h1>ECSO Gateway</h1>
+<p><a href="/api-gateway/ecso/vue">Login</a></p>
+<p><code>/api-gateway/ecso/auth/**</code> - OAuth2 + DCR</p>
+<p><code>/mcp-gateway/mcp</code> - MCP Tools</p>';
+        }
+    }
+}
+
