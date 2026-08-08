@@ -6,6 +6,14 @@ server:
       cookie:
         name: MCP_AUTHORIZATION_SERVER_SESSIONID
 
+# MCP DCR (Dynamic Client Registration) security settings
+# These apply to clients registered via POST /oauth2/register
+mcp:
+  dcr:
+    client-secret-expires-in: 90d    # How long DCR client secrets remain valid (default: 90d)
+    access-token-time-to-live: 5m    # Access token TTL for DCR-registered clients (default: 5m)
+    refresh-token-time-to-live: 1h   # Refresh token TTL for DCR-registered clients (default: 1h)
+
 spring:
   application:
     name: auth-server

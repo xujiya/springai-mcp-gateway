@@ -16,6 +16,7 @@
 
 package org.springaicommunity.mcp.security.authorizationserver.config;
 
+import java.time.Duration;
 import java.util.Map;
 import java.util.function.Consumer;
 
@@ -26,6 +27,7 @@ import org.springframework.beans.factory.BeanFactoryUtils;
 import org.springframework.beans.factory.NoUniqueBeanDefinitionException;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.ResolvableType;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -68,7 +70,16 @@ public class McpAuthorizationServerConfigurer
 			authServer.tokenGenerator(tokenGenerator);
 			System.out.println("[MCP] tokenGenerator set: " + tokenGenerator.getClass().getName());
 		});
-		http.with(new OAuth2ClientRegistrationEndpointConfigurer(), withDefaults());
+		// Configure DCR security settings from application.yml
+		Environment env = http.getSharedObject(ApplicationContext.class).getEnvironment();
+		OAuth2ClientRegistrationEndpointConfigurer dcrConfigurer = new OAuth2ClientRegistrationEndpointConfigurer();
+		dcrConfigurer.setDcrClientSecretExpiresIn(
+				parseDuration(env.getProperty("mcp.dcr.client-secret-expires-in", "90d")));
+		dcrConfigurer.setDcrAccessTokenTimeToLive(
+				parseDuration(env.getProperty("mcp.dcr.access-token-time-to-live", "5m")));
+		dcrConfigurer.setDcrRefreshTokenTimeToLive(
+				parseDuration(env.getProperty("mcp.dcr.refresh-token-time-to-live", "1h")));
+		http.with(dcrConfigurer, withDefaults());
 		http.csrf(csrf -> csrf.ignoringRequestMatchers(
 				OAuth2ClientRegistrationEndpointConfigurer.OAUTH2_CLIENT_REGISTRATION_ENDPOINT_URI));
 
@@ -77,6 +88,32 @@ public class McpAuthorizationServerConfigurer
 		// http.exceptionHandling(
 		// 		exc -> exc.defaultAuthenticationEntryPointFor(new HttpStatusEntryPoint(HttpStatus.NOT_FOUND),
 		// 				PathPatternRequestMatcher.withDefaults().matcher("/.well-known/openid-configuration")));
+	}
+
+	private static Duration parseDuration(String value) {
+		// Parse Spring-style duration: "90d", "5m", "1h", "30s", "P90D" (ISO)
+		if (value == null || value.isBlank()) {
+			return Duration.ofDays(90);
+		}
+		try {
+			// Try ISO-8601 first (e.g. "P90D", "PT5M")
+			if (value.startsWith("P")) {
+				return Duration.parse(value);
+			}
+			// Spring boot style: number + unit suffix
+			char unit = value.charAt(value.length() - 1);
+			long amount = Long.parseLong(value.substring(0, value.length() - 1));
+			return switch (unit) {
+				case 'd' -> Duration.ofDays(amount);
+				case 'h' -> Duration.ofHours(amount);
+				case 'm' -> Duration.ofMinutes(amount);
+				case 's' -> Duration.ofSeconds(amount);
+				default -> Duration.parse(value); // fall back to ISO
+			};
+		} catch (Exception e) {
+			throw new IllegalArgumentException(
+					"Invalid duration '" + value + "'. Use Spring style (90d, 5m, 1h) or ISO-8601 (P90D, PT5M)", e);
+		}
 	}
 
 	private static Consumer<OAuth2AuthorizationServerMetadata.Builder> authorizationServerMetadataCustomizer() {

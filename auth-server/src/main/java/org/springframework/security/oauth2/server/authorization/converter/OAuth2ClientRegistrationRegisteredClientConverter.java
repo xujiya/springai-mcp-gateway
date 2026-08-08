@@ -15,10 +15,12 @@
  */
 package org.springframework.security.oauth2.server.authorization.converter;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.crypto.keygen.Base64StringKeyGenerator;
 import org.springframework.security.crypto.keygen.StringKeyGenerator;
@@ -45,6 +47,16 @@ public final class OAuth2ClientRegistrationRegisteredClientConverter
 
 	private static final StringKeyGenerator CLIENT_SECRET_GENERATOR = new Base64StringKeyGenerator(
 			Base64.getUrlEncoder().withoutPadding(), 48);
+
+	private Duration clientSecretExpiresIn = Duration.ofDays(90);
+
+	/**
+	 * Set the lifetime of DCR-registered client secrets. Defaults to 90 days.
+	 * Configure via {@code mcp.dcr.client-secret-expires-in} in application.yml.
+	 */
+	public void setClientSecretExpiresIn(Duration clientSecretExpiresIn) {
+		this.clientSecretExpiresIn = clientSecretExpiresIn;
+	}
 
 	@Override
 	public RegisteredClient convert(OAuth2ClientRegistration clientRegistration) {
@@ -108,8 +120,8 @@ public final class OAuth2ClientRegistrationRegisteredClientConverter
 		builder
 				.clientSettings(clientSettingsBuilder.build());
 
-		// Security: DCR-registered client secrets expire after 90 days
-		builder.clientSecretExpiresAt(Instant.now().plus(java.time.Duration.ofDays(90)));
+		// Security: DCR-registered client secrets expire after configurable duration (default 90 days)
+		builder.clientSecretExpiresAt(Instant.now().plus(this.clientSecretExpiresIn));
 
 		return builder.build();
 		// @formatter:on

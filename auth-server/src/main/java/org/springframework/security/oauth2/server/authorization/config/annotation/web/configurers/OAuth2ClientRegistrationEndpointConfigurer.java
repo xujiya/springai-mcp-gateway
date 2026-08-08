@@ -15,6 +15,7 @@
  */
 package org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,7 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.converter.OAuth2ClientRegistrationRegisteredClientConverter;
 import org.springframework.security.oauth2.server.authorization.converter.RegisteredClientOAuth2ClientRegistrationConverter;
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
+import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 import org.springframework.security.oauth2.server.authorization.web.OAuth2ClientRegistrationEndpointFilter;
 import org.springframework.security.web.authentication.preauth.AbstractPreAuthenticatedProcessingFilter;
 
@@ -46,13 +48,44 @@ public final class OAuth2ClientRegistrationEndpointConfigurer
 
 	private static final String RESOURCE_IDS_KEY = "resource_ids";
 
+	private Duration dcrClientSecretExpiresIn = Duration.ofDays(90);
+
+	private Duration dcrAccessTokenTimeToLive = Duration.ofMinutes(5);
+
+	private Duration dcrRefreshTokenTimeToLive = Duration.ofHours(1);
+
+	/**
+	 * Set the lifetime of DCR-registered client secrets. Defaults to 90 days.
+	 * Configure via {@code mcp.dcr.client-secret-expires-in} in application.yml.
+	 */
+	public void setDcrClientSecretExpiresIn(Duration dcrClientSecretExpiresIn) {
+		this.dcrClientSecretExpiresIn = dcrClientSecretExpiresIn;
+	}
+
+	/**
+	 * Set the access token TTL for DCR-registered clients. Defaults to 5 minutes.
+	 * Configure via {@code mcp.dcr.access-token-time-to-live} in application.yml.
+	 */
+	public void setDcrAccessTokenTimeToLive(Duration dcrAccessTokenTimeToLive) {
+		this.dcrAccessTokenTimeToLive = dcrAccessTokenTimeToLive;
+	}
+
+	/**
+	 * Set the refresh token TTL for DCR-registered clients. Defaults to 1 hour.
+	 * Configure via {@code mcp.dcr.refresh-token-time-to-live} in application.yml.
+	 */
+	public void setDcrRefreshTokenTimeToLive(Duration dcrRefreshTokenTimeToLive) {
+		this.dcrRefreshTokenTimeToLive = dcrRefreshTokenTimeToLive;
+	}
+
 	@Override
 	public void configure(HttpSecurity http) {
 		RegisteredClientRepository registeredClientRepository = OAuth2ConfigurerUtils
 			.getRegisteredClientRepository(http);
 		OAuth2ClientRegistrationAuthenticationProvider clientRegistrationAuthenticationProvider = new OAuth2ClientRegistrationAuthenticationProvider(
 				registeredClientRepository);
-		clientRegistrationAuthenticationProvider.setRegisteredClientConverter(new CustomRegisteredClientConverter());
+		clientRegistrationAuthenticationProvider.setRegisteredClientConverter(
+				new CustomRegisteredClientConverter(this.dcrClientSecretExpiresIn, this.dcrAccessTokenTimeToLive, this.dcrRefreshTokenTimeToLive));
 		clientRegistrationAuthenticationProvider
 			.setClientRegistrationConverter(new CustomClientRegistrationConverter());
 		http.authenticationProvider(clientRegistrationAuthenticationProvider);
@@ -70,7 +103,18 @@ public final class OAuth2ClientRegistrationEndpointConfigurer
 	private static final class CustomRegisteredClientConverter
 			implements Converter<OAuth2ClientRegistration, RegisteredClient> {
 
+		private final Duration clientSecretExpiresIn;
+		private final Duration accessTokenTimeToLive;
+		private final Duration refreshTokenTimeToLive;
+
 		private final OAuth2ClientRegistrationRegisteredClientConverter delegate = new OAuth2ClientRegistrationRegisteredClientConverter();
+
+		CustomRegisteredClientConverter(Duration clientSecretExpiresIn, Duration accessTokenTimeToLive, Duration refreshTokenTimeToLive) {
+			this.clientSecretExpiresIn = clientSecretExpiresIn;
+			this.accessTokenTimeToLive = accessTokenTimeToLive;
+			this.refreshTokenTimeToLive = refreshTokenTimeToLive;
+			this.delegate.setClientSecretExpiresIn(clientSecretExpiresIn);
+		}
 
 		@Override
 		public RegisteredClient convert(OAuth2ClientRegistration clientRegistration) {
@@ -82,11 +126,11 @@ public final class OAuth2ClientRegistrationEndpointConfigurer
 						clientRegistration.getClaims().get(RESOURCE_IDS_KEY));
 			}
 
-			// Security: DCR-registered clients get short-lived tokens (5 minutes) and rotating refresh tokens
-			org.springframework.security.oauth2.server.authorization.settings.TokenSettings.Builder tokenSettingsBuilder =
-				org.springframework.security.oauth2.server.authorization.settings.TokenSettings.withSettings(registeredClient.getTokenSettings().getSettings())
-					.accessTokenTimeToLive(java.time.Duration.ofMinutes(5))
-					.refreshTokenTimeToLive(java.time.Duration.ofHours(1))
+			// Security: DCR-registered clients get short-lived tokens and rotating refresh tokens (configurable)
+			TokenSettings.Builder tokenSettingsBuilder =
+				TokenSettings.withSettings(registeredClient.getTokenSettings().getSettings())
+					.accessTokenTimeToLive(this.accessTokenTimeToLive)
+					.refreshTokenTimeToLive(this.refreshTokenTimeToLive)
 					.reuseRefreshTokens(false);
 
 			return RegisteredClient.from(registeredClient)
