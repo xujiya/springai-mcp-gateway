@@ -196,4 +196,3 @@ export default {
 .step.ok { background: #c8e6c9; }
 .step-arrow { color: #888; font-size: 14px; }
 </style>
-</template>

@@ -289,4 +289,3 @@ export default {
 .actions { display: flex; gap: 6px; }
 .empty { text-align: center; color: #999; padding: 20px; }
 </style>
-</template>

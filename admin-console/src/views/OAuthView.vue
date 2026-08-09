@@ -163,4 +163,3 @@ export default {
 .model-box li { margin-bottom: 4px; }
 .empty { text-align: center; color: #999; padding: 20px; }
 </style>
-</template>

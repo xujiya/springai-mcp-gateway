@@ -267,4 +267,3 @@ tr:hover td { background: #fafafa; }
 
 .mono { font-family: 'SF Mono', Consolas, monospace; font-size: 12px; }
 </style>
-</template>
