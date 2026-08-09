@@ -19,5 +19,46 @@ INSERT IGNORE INTO oauth2_registered_client (
     '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:8080/login/oauth2/code/authserver","http://127.0.0.1:8080/login/oauth2/code/authserver"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
-    '{"accessTokenTimeToLive":"PT1H","refreshTokenTimeToLive":"P30D"}'
+    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
+);
+
+-- Pre-registered PKCE public clients for MCP services (stable client_id, like Alibaba Cloud)
+-- Weather MCP client: use authorization_code + PKCE, no client_credentials
+INSERT IGNORE INTO oauth2_registered_client (
+    id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
+    client_authentication_methods, authorization_grant_types, redirect_uris, scopes,
+    client_settings, token_settings
+) VALUES (
+    'mcp-weather-client',
+    'mcp-weather-client',
+    CURRENT_TIMESTAMP,
+    NULL,
+    NULL,
+    'Weather MCP Service',
+    '["none"]',
+    '["authorization_code","refresh_token"]',
+    '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback"]',
+    '["offline_access","mcp:read","mcp:write"]',
+    '{"requireProofKey":true,"requireAuthorizationConsent":false}',
+    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
+);
+
+-- Climate MCP client: use authorization_code + PKCE, no client_credentials
+INSERT IGNORE INTO oauth2_registered_client (
+    id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
+    client_authentication_methods, authorization_grant_types, redirect_uris, scopes,
+    client_settings, token_settings
+) VALUES (
+    'mcp-climate-client',
+    'mcp-climate-client',
+    CURRENT_TIMESTAMP,
+    NULL,
+    NULL,
+    'Climate MCP Service',
+    '["none"]',
+    '["authorization_code","refresh_token"]',
+    '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback"]',
+    '["offline_access","mcp:read","mcp:write"]',
+    '{"requireProofKey":true,"requireAuthorizationConsent":false}',
+    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
 );

@@ -2,13 +2,15 @@ package org.springaicommunity.mcp.security.sample.authorizationserver;
 
 import java.util.List;
 
-
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
-
+import org.springframework.security.crypto.factory.PasswordEncoderFactories;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -19,24 +21,51 @@ import static org.springframework.security.config.Customizer.withDefaults;
 
 @Configuration
 @EnableWebSecurity
+@EnableMethodSecurity
 class AuthorizationServerConfiguration {
+
+	private final boolean dcrEnabled;
+
+	AuthorizationServerConfiguration(
+			@Value("${mcp.dcr.enabled:true}") boolean dcrEnabled) {
+		this.dcrEnabled = dcrEnabled;
+	}
 
 	@Bean
 	SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-		return http
-				.authorizeHttpRequests(auth -> auth
-						.requestMatchers("/.well-known/openid-configuration", "/vue-login", "/assets/**").permitAll()
-						.anyRequest().authenticated())
-				.formLogin(form -> form
-						.loginPage("/vue-login")
-						.loginProcessingUrl("/login")
-						.defaultSuccessUrl("/")
-						.failureUrl("/vue-login?error")
-						.permitAll())
-				.with(mcpAuthorizationServer(), withDefaults())
-				.csrf(csrf -> csrf.ignoringRequestMatchers("/login", "/oauth2/register"))
-				.cors(cors -> cors.configurationSource(corsConfigurationSource()))
-				.build();
+		http
+			.authorizeHttpRequests(auth -> {
+				auth
+					.requestMatchers("/.well-known/openid-configuration", "/vue-login", "/assets/**").permitAll();
+				// When DCR is disabled, block /oauth2/register
+				if (!dcrEnabled) {
+					auth.requestMatchers("/oauth2/register").denyAll();
+				}
+				auth.anyRequest().authenticated();
+			})
+			.formLogin(form -> form
+					.loginPage("/vue-login")
+					.loginProcessingUrl("/login")
+					.defaultSuccessUrl("/")
+					.failureUrl("/vue-login?error")
+					.permitAll())
+			.with(mcpAuthorizationServer(), withDefaults());
+
+		if (dcrEnabled) {
+			http.csrf(csrf -> csrf.ignoringRequestMatchers("/login", "/oauth2/register"));
+		} else {
+			http.csrf(csrf -> csrf.ignoringRequestMatchers("/login"));
+		}
+
+		http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
+
+		return http.build();
+	}
+
+	/** Password encoder for client secrets and user passwords */
+	@Bean
+	PasswordEncoder passwordEncoder() {
+		return PasswordEncoderFactories.createDelegatingPasswordEncoder();
 	}
 
 	/** Vue login 页面、静态资源、AS metadata 等不需要 Security filter chain 处理 */

@@ -62,26 +62,32 @@ public class McpAuthorizationServerConfigurer
 
 	@Override
 	public void init(HttpSecurity http) throws Exception {
+		Environment env = http.getSharedObject(ApplicationContext.class).getEnvironment();
+		boolean dcrEnabled = Boolean.parseBoolean(env.getProperty("mcp.dcr.enabled", "true"));
+
 		http.with(authorizationServer(), authServer -> {
-			authServer.authorizationServerMetadataEndpoint(
-					authorizationServerMetadataEndpoint -> authorizationServerMetadataEndpoint
-						.authorizationServerMetadataCustomizer(authorizationServerMetadataCustomizer()));
+		authServer.authorizationServerMetadataEndpoint(
+				authorizationServerMetadataEndpoint -> authorizationServerMetadataEndpoint
+					.authorizationServerMetadataCustomizer(authorizationServerMetadataCustomizer(dcrEnabled)));
 			OAuth2TokenGenerator<?> tokenGenerator = getTokenGenerator(http);
 			authServer.tokenGenerator(tokenGenerator);
 			System.out.println("[MCP] tokenGenerator set: " + tokenGenerator.getClass().getName());
 		});
-		// Configure DCR security settings from application.yml
-		Environment env = http.getSharedObject(ApplicationContext.class).getEnvironment();
-		OAuth2ClientRegistrationEndpointConfigurer dcrConfigurer = new OAuth2ClientRegistrationEndpointConfigurer();
-		dcrConfigurer.setDcrClientSecretExpiresIn(
-				parseDuration(env.getProperty("mcp.dcr.client-secret-expires-in", "90d")));
-		dcrConfigurer.setDcrAccessTokenTimeToLive(
-				parseDuration(env.getProperty("mcp.dcr.access-token-time-to-live", "5m")));
-		dcrConfigurer.setDcrRefreshTokenTimeToLive(
-				parseDuration(env.getProperty("mcp.dcr.refresh-token-time-to-live", "1h")));
-		http.with(dcrConfigurer, withDefaults());
-		http.csrf(csrf -> csrf.ignoringRequestMatchers(
-				OAuth2ClientRegistrationEndpointConfigurer.OAUTH2_CLIENT_REGISTRATION_ENDPOINT_URI));
+		// Configure DCR — only if enabled
+		if (dcrEnabled) {
+			OAuth2ClientRegistrationEndpointConfigurer dcrConfigurer = new OAuth2ClientRegistrationEndpointConfigurer();
+			dcrConfigurer.setDcrClientSecretExpiresIn(
+					parseDuration(env.getProperty("mcp.dcr.client-secret-expires-in", "90d")));
+			dcrConfigurer.setDcrAccessTokenTimeToLive(
+					parseDuration(env.getProperty("mcp.dcr.access-token-time-to-live", "5m")));
+			dcrConfigurer.setDcrRefreshTokenTimeToLive(
+					parseDuration(env.getProperty("mcp.dcr.refresh-token-time-to-live", "1h")));
+			http.with(dcrConfigurer, withDefaults());
+			http.csrf(csrf -> csrf.ignoringRequestMatchers(
+					OAuth2ClientRegistrationEndpointConfigurer.OAUTH2_CLIENT_REGISTRATION_ENDPOINT_URI));
+		} else {
+			System.out.println("[MCP] DCR disabled — /oauth2/register endpoint blocked");
+		}
 
 		// MCP: 注释掉 exceptionHandling 404 — AS metadata 需要被未认证客户端访问
 		// OAuth2AuthorizationServerMetadataEndpointFilter 会直接返回 metadata
@@ -116,17 +122,19 @@ public class McpAuthorizationServerConfigurer
 		}
 	}
 
-	private static Consumer<OAuth2AuthorizationServerMetadata.Builder> authorizationServerMetadataCustomizer() {
+	private static Consumer<OAuth2AuthorizationServerMetadata.Builder> authorizationServerMetadataCustomizer(boolean dcrEnabled) {
 		return (builder) -> {
 			AuthorizationServerContext authorizationServerContext = AuthorizationServerContextHolder.getContext();
 			String issuer = authorizationServerContext.getIssuer();
 
-			String clientRegistrationEndpoint = UriComponentsBuilder.fromUriString(issuer)
-				.path(OAuth2ClientRegistrationEndpointConfigurer.OAUTH2_CLIENT_REGISTRATION_ENDPOINT_URI)
-				.build()
-				.toUriString();
-
-			builder.clientRegistrationEndpoint(clientRegistrationEndpoint);
+			// Only expose registration_endpoint when DCR is enabled
+			if (dcrEnabled) {
+				String clientRegistrationEndpoint = UriComponentsBuilder.fromUriString(issuer)
+					.path(OAuth2ClientRegistrationEndpointConfigurer.OAUTH2_CLIENT_REGISTRATION_ENDPOINT_URI)
+					.build()
+					.toUriString();
+				builder.clientRegistrationEndpoint(clientRegistrationEndpoint);
+			}
 		};
 	}
 
