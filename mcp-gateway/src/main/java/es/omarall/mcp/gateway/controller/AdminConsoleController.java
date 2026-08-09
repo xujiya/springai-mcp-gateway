@@ -47,6 +47,9 @@ public class AdminConsoleController {
     private final PasswordEncoder passwordEncoder;
     private final String adminTokenHash;
     private final String adminTokenPlaintext;
+    private final int mcpServiceCount;
+    private final boolean dcrEnabled;
+    private final String accessTokenTTL;
 
     public AdminConsoleController(
             SysUserMapper userMapper,
@@ -55,13 +58,20 @@ public class AdminConsoleController {
             ApiKeyService apiKeyService,
             PasswordEncoder passwordEncoder,
             @Value("${ecso.mcp.api-key.admin-token-hash:}") String adminTokenHash,
-            @Value("${ecso.mcp.api-key.admin-token:}") String adminTokenPlaintext) {
+            @Value("${ecso.mcp.api-key.admin-token:}") String adminTokenPlaintext,
+            @Value("${ecso.mcp.services.weather.url:}") String weatherUrl,
+            @Value("${ecso.mcp.services.climate.url:}") String climateUrl,
+            @Value("${ecso.auth.dcr.enabled:true}") boolean dcrEnabled,
+            @Value("${ecso.auth.dcr.access-token-time-to-live:24h}") String accessTokenTTL) {
         this.userMapper = userMapper;
         this.clientMapper = clientMapper;
         this.apiKeyMapper = apiKeyMapper;
         this.apiKeyService = apiKeyService;
         this.passwordEncoder = passwordEncoder;
         this.adminTokenPlaintext = adminTokenPlaintext;
+        this.mcpServiceCount = (weatherUrl.isBlank() ? 0 : 1) + (climateUrl.isBlank() ? 0 : 1);
+        this.dcrEnabled = dcrEnabled;
+        this.accessTokenTTL = accessTokenTTL;
 
         if (!adminTokenHash.isBlank()) {
             this.adminTokenHash = adminTokenHash;
@@ -330,6 +340,51 @@ public class AdminConsoleController {
         if (!isAdmin(auth)) return unauthorized("invalid_admin_token");
         return apiKeyService.delete(id) ? ResponseEntity.ok(Map.of("message", "已删除"))
                 : ResponseEntity.notFound().build();
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // 系统运行状态
+    // ═══════════════════════════════════════════════════════════
+
+    @GetMapping(value = "/system", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> systemInfo(@RequestHeader(value = "Authorization", required = false) String auth) {
+        if (!isAdmin(auth)) return unauthorized("invalid_admin_token");
+
+        Runtime rt = Runtime.getRuntime();
+        Map<String, Object> info = new HashMap<>();
+
+        // Java runtime
+        info.put("javaVersion", System.getProperty("java.version"));
+        info.put("jvmName", System.getProperty("java.vm.name"));
+        info.put("pid", ProcessHandle.current().pid());
+
+        // Uptime (approximate from runtime)
+        long uptimeMs = System.currentTimeMillis() - getStartTime();
+        info.put("uptimeMs", uptimeMs);
+
+        // Memory
+        info.put("heapUsed", rt.totalMemory() - rt.freeMemory());
+        info.put("heapMax", rt.maxMemory());
+        info.put("nonHeapUsed", 0); // Computation requires ManagementFactory
+        info.put("threadCount", Thread.activeCount());
+
+        // MCP config
+        info.put("mcpServiceCount", mcpServiceCount);
+        info.put("dcrEnabled", dcrEnabled);
+        info.put("accessTokenTTL", accessTokenTTL);
+
+        return ResponseEntity.ok(info);
+    }
+
+    private long getStartTime() {
+        try {
+            // Use ProcessHandle to get start time
+            return ProcessHandle.current().info().startInstant()
+                    .map(i -> i.toEpochMilli())
+                    .orElse(System.currentTimeMillis());
+        } catch (Exception e) {
+            return System.currentTimeMillis();
+        }
     }
 
     // ═══════════════════════════════════════════════════════════

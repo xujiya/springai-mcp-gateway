@@ -62,12 +62,13 @@
 
       <!-- Tab Content -->
       <div class="tab-content">
+        <DashboardView v-if="activeTab === 'dashboard'" />
         <ApiKeysView v-if="activeTab === 'ak'" />
-        <OAuthView v-if="activeTab === 'oauth'" />
-        <UsersView v-if="activeTab === 'users'" />
         <ClientsView v-if="activeTab === 'clients'" />
+        <UsersView v-if="activeTab === 'users'" />
         <ServicesView v-if="activeTab === 'services'" />
         <SecurityView v-if="activeTab === 'security'" />
+        <SystemView v-if="activeTab === 'system'" />
       </div>
     </div>
   </div>
@@ -76,16 +77,17 @@
 <script>
 import { ref } from 'vue'
 import { login as apiLogin, getAdminToken, clearAdminToken } from './api/admin.js'
+import DashboardView from './views/DashboardView.vue'
 import ApiKeysView from './views/ApiKeysView.vue'
-import OAuthView from './views/OAuthView.vue'
-import UsersView from './views/UsersView.vue'
 import ClientsView from './views/ClientsView.vue'
+import UsersView from './views/UsersView.vue'
 import ServicesView from './views/ServicesView.vue'
 import SecurityView from './views/SecurityView.vue'
+import SystemView from './views/SystemView.vue'
 
 export default {
   name: 'App',
-  components: { ApiKeysView, OAuthView, UsersView, ClientsView, ServicesView, SecurityView },
+  components: { DashboardView, ApiKeysView, ClientsView, UsersView, ServicesView, SecurityView, SystemView },
   setup() {
     const isLoggedIn = ref(!!getAdminToken())
     const currentUser = ref(localStorage.getItem('admin_user') || '')
@@ -93,15 +95,16 @@ export default {
     const loginPassword = ref('')
     const loginError = ref('')
     const loginLoading = ref(false)
-    const activeTab = ref('ak')
+    const activeTab = ref('dashboard')
 
     const tabs = [
-      { id: 'ak',       icon: '🔑', label: 'AK 静态凭证' },
-      { id: 'oauth',    icon: '🔐', label: 'OAuth 状态' },
-      { id: 'users',    icon: '👤', label: '用户管理' },
+      { id: 'dashboard', icon: '📊', label: '仪表盘' },
+      { id: 'ak',       icon: '🔑', label: 'AK 凭证' },
       { id: 'clients',  icon: '📋', label: 'OAuth 客户端' },
+      { id: 'users',    icon: '👤', label: '用户' },
       { id: 'services', icon: '📡', label: 'MCP 服务' },
-      { id: 'security', icon: '🛡️', label: '安全状态' },
+      { id: 'security', icon: '🛡️', label: '安全' },
+      { id: 'system',   icon: '🖥️', label: '系统' },
     ]
 
     async function login() {
