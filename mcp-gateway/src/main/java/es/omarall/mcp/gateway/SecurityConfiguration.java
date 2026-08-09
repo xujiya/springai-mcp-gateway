@@ -46,26 +46,20 @@ public class SecurityConfiguration {
                 .with(
                         McpServerOAuth2Configurer.mcpServerOAuth2(),
                         (mcpAuthorization) -> {
-                            // REQUIRED: the authserver's issuer URI
                             mcpAuthorization.authorizationServer(this.authServerPublicUrl);
-                            // NOTE: providing a customizer REPLACES the library default
-                            // (which only sets authServer/resourceName/bearerMethod and,
-                            // as of this library revision, does NOT apply configured scopes),
-                            // so all standard claims must be set here.
                             mcpAuthorization.protectedResourceMetadataCustomizer(metadata -> metadata
-                                    // Override the `resource` claim: the library derives it
-                                    // from the request URL, which behind nginx is the internal
-                                    // http://127.0.0.1:8082/mcp. Expose the public prefixed URL.
                                     .resource(this.mcpServerPublicUrl + "/mcp")
                                     .authorizationServer(this.authServerPublicUrl)
                                     .resourceName("Spring MCP Gateway")
                                     .bearerMethod("header")
                                     .scope("mcp:read")
                                     .scope("mcp:write"));
-                            // OPTIONAL: enforce the `aud` claim in the JWT token.
-//                            mcpAuthorization.validateAudienceClaim(true);
                         }
                 )
+                // Per-service WWW-Authenticate: /weather/mcp → /weather/.well-known/oauth-protected-resource
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(
+                                new ServiceAwareBearerEntryPoint(this.mcpServerPublicUrl)))
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .addFilterAfter(new PublicUrlFilter(8082, this.mcpServerPublicUrl),
