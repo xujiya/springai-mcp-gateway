@@ -16,16 +16,16 @@
 
 | 路径 | 目标 | Filter | 说明 |
 |------|------|--------|------|
-| `/ecso/vue/**` | Vite:9091 | RewritePath | Vue 登录前端 |
-| `/ecso/admin/**` | Vite:9094 | RewritePath | 管理控制台 |
-| `/ecso/auth/**` | Auth:9090 | StripPrefix=2 | OAuth2 端点 |
+| `/vue/**` | Vite:9091 | RewritePath | Vue 登录前端 |
+| `/admin/**` | Vite:9094 | RewritePath | 管理控制台 |
+| `/auth/**` | Auth:9090 | StripPrefix=1 | OAuth2 端点 |
 | `/.well-known/oauth-authorization-server/**` | Auth:9090 | RewritePath | RFC 8414 发现 |
 
 ## URL 重写
 
 ### RewriteAuthUrls (JSON body)
 
-将 JSON 响应中的内部 URL (`localhost:9090`) 重写为公开 URL (`localhost:8080/api-gateway/ecso/auth`)。
+将 JSON 响应中的内部 URL (`localhost:9090`) 重写为公开 URL (`localhost:8080/api-gateway/auth`)。
 
 ### RewriteResponseHeader (302 Location)
 
@@ -44,15 +44,15 @@ AllowedOriginPatterns: http://localhost:*, http://127.0.0.1:*, null
 
 ```
 /.well-known/oauth-authorization-server/**
-/ecso/vue/**
-/ecso/admin/**
-/ecso/auth/.well-known/**
-/ecso/auth/oauth2/register
-/ecso/auth/oauth2/token
-/ecso/auth/oauth2/jwks
-/ecso/auth/oauth2/authorize
-/ecso/auth/login
-/ecso/auth/oauth2/auth-info
+/vue/**
+/admin/**
+/auth/.well-known/**
+/auth/oauth2/register
+/auth/oauth2/token
+/auth/oauth2/jwks
+/auth/oauth2/authorize
+/auth/login
+/auth/oauth2/auth-info
 ```
 
 ## 关键文件

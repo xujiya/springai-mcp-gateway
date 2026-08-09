@@ -18,7 +18,7 @@
 | `/climate/mcp` | `http://localhost:9093/mcp` | getStormWarnings, getClimateForecast |
 | `/mcp` | **404** (统一端点已移除) | — |
 
-新增后端 = 在 `ecso.mcp.services` 加一行 + 重启。
+新增后端 = 在 `mcp.services` 加一行 + 重启。
 
 ## 安全
 
@@ -88,18 +88,17 @@ mcp-gateway/src/main/java/es/omarall/mcp/gateway/
 ## 配置
 
 ```yaml
-ecso:
-  mcp:
-    services:
-      weather: { url: http://localhost:9092/mcp }
-      climate: { url: http://localhost:9093/mcp }
-  auth-server:
-    public-url: http://localhost:8080/api-gateway/ecso/auth
-  mcp-server:
-    public-url: http://localhost:8080/mcp-gateway
-  api-key:
-    admin-token: adm-xxx          # dev
-    # admin-token-hash: {bcrypt}  # production
+mcp:
+  services:
+    weather: { url: http://localhost:9092/mcp }
+    climate: { url: http://localhost:9093/mcp }
+auth-server:
+  public-url: http://localhost:8080/api-gateway/auth
+mcp-server:
+  public-url: http://localhost:8080/mcp-gateway
+api-key:
+  admin-token: adm-xxx          # dev
+  # admin-token-hash: {bcrypt}  # production
 ```
 
 ## 默认凭证 (开发环境)

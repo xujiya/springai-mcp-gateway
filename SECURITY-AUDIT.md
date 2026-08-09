@@ -14,7 +14,7 @@ The nginx:8080 endpoint serves as the sole public entry point, proxying to api-g
 **Hardening applied through v0.7.0–v0.13.1:**
 - DCR denyAll → 403 JSON (no internal address leakage)
 - auth-info desensitized (no clientId/redirectUri)
-- Session Cookie: SameSite=Lax, Path=/api-gateway/ecso/auth, HttpOnly
+- Session Cookie: SameSite=Lax, Path=/api-gateway/auth, HttpOnly
 - CORS restricted to localhost/127.0.0.1/null
 - nginx server_tokens off, root / → 404
 - Two-tier client model: DCR blocks client_credentials
@@ -35,18 +35,18 @@ The nginx:8080 endpoint serves as the sole public entry point, proxying to api-g
 | # | URL | Method | Auth | Sensitivity | Risk | Notes |
 |---|-----|--------|------|-------------|------|-------|
 | 1 | `/` | GET | None | 🟢 404 | LOW | Hardened: was leaking architecture |
-| 2 | `/api-gateway/ecso/auth/.well-known/oauth-authorization-server` | GET | None | 🟢 Public | LOW | RFC 8414 standard |
-| 3 | `/api-gateway/ecso/auth/oauth2/jwks` | GET | None | 🟢 Public | LOW | RFC 7517 standard |
-| 4 | `/api-gateway/ecso/auth/oauth2/authorize` | GET/POST | Session | 🟢 Standard | LOW | |
-| 5 | `/api-gateway/ecso/auth/oauth2/token` | POST | client_auth | 🟡 Standard | MEDIUM | No rate limit |
-| 6 | `/api-gateway/ecso/auth/oauth2/introspect` | POST | client_auth | 🟢 Standard | LOW | |
-| 7 | `/api-gateway/ecso/auth/oauth2/revoke` | POST | client_auth | 🟢 Standard | LOW | |
-| 8 | `/api-gateway/ecso/auth/oauth2/register` | POST | denyAll/open | 🟢 Closed/Two-tier | LOW | DCR toggleable |
-| 9 | `/api-gateway/ecso/auth/login` | GET | Session | 🟢 Login page | LOW | text/html |
-| 10 | `/api-gateway/ecso/auth/login` | POST | Session | 🟡 Auth | LOW | |
-| 11 | `/api-gateway/ecso/auth/oauth2/auth-info` | GET | Session | 🟢 Desensitized | LOW | No clientId/redirectUri |
-| 12 | `/api-gateway/ecso/vue/` | GET | None | 🟢 Static | LOW | Vue login UI |
-| 13 | `/api-gateway/ecso/admin/` | GET | None | 🟢 Static | LOW | Admin console UI |
+| 2 | `/api-gateway/auth/.well-known/oauth-authorization-server` | GET | None | 🟢 Public | LOW | RFC 8414 standard |
+| 3 | `/api-gateway/auth/oauth2/jwks` | GET | None | 🟢 Public | LOW | RFC 7517 standard |
+| 4 | `/api-gateway/auth/oauth2/authorize` | GET/POST | Session | 🟢 Standard | LOW | |
+| 5 | `/api-gateway/auth/oauth2/token` | POST | client_auth | 🟡 Standard | MEDIUM | No rate limit |
+| 6 | `/api-gateway/auth/oauth2/introspect` | POST | client_auth | 🟢 Standard | LOW | |
+| 7 | `/api-gateway/auth/oauth2/revoke` | POST | client_auth | 🟢 Standard | LOW | |
+| 8 | `/api-gateway/auth/oauth2/register` | POST | denyAll/open | 🟢 Closed/Two-tier | LOW | DCR toggleable |
+| 9 | `/api-gateway/auth/login` | GET | Session | 🟢 Login page | LOW | text/html |
+| 10 | `/api-gateway/auth/login` | POST | Session | 🟡 Auth | LOW | |
+| 11 | `/api-gateway/auth/oauth2/auth-info` | GET | Session | 🟢 Desensitized | LOW | No clientId/redirectUri |
+| 12 | `/api-gateway/vue/` | GET | None | 🟢 Static | LOW | Vue login UI |
+| 13 | `/api-gateway/admin/` | GET | None | 🟢 Static | LOW | Admin console UI |
 | 14 | `/mcp-gateway/admin/login` | POST | None→Token | 🟡 Admin | MEDIUM | Default admin/admin |
 | 15 | `/mcp-gateway/admin/users` | GET/POST/PUT/DELETE | Admin Token | 🟡 CRUD | MEDIUM | |
 | 16 | `/mcp-gateway/admin/clients` | GET/POST/DELETE | Admin Token | 🟡 CRUD | MEDIUM | |
@@ -135,7 +135,7 @@ Useful for debugging, no internal info. Acceptable.
 |----|---------|-----|---------|
 | H1 | 302 Location leaks localhost:9090 | denyAll → 403 JSON | v0.7.0 |
 | H2 | auth-info leaks clientId/redirectUri | Desensitized response | v0.7.0 |
-| M1 | Cookie no Secure/SameSite/Path | SameSite=Lax + Path=/api-gateway/ecso/auth | v0.7.0 |
+| M1 | Cookie no Secure/SameSite/Path | SameSite=Lax + Path=/api-gateway/auth | v0.7.0 |
 | M2 | CORS allows * | Restricted to localhost/127.0.0.1/null | v0.7.0 |
 | M3 | nginx version leaked | server_tokens off | v0.7.0 |
 | M4 | Root / leaks architecture | → 404 | v0.7.0 |

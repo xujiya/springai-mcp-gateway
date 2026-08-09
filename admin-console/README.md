@@ -1,6 +1,6 @@
 # Admin Console — Vue3 管理控制台
 
-> v0.13.1 封板 | 端口: 9094 | URL: `http://localhost:8080/api-gateway/ecso/admin/`
+> v0.13.1 封板 | 端口: 9094 | URL: `http://localhost:8080/api-gateway/admin/`
 
 ## 功能
 
@@ -14,7 +14,7 @@
 
 ## 架构
 
-- **页面**: 通过 API Gateway whitelist 路由 (`/ecso/admin/**` → Vite:9094)
+- **页面**: 通过 API Gateway whitelist 路由 (`/admin/**` → Vite:9094)
 - **API 调用**: 通过 `/mcp-gateway/` (nginx 直连 8082, 避免 JWT 过滤)
 - **登录**: sys_user 表的 username/password → admin token
 
@@ -35,7 +35,7 @@ server: {
     '/mcp-gateway': { target: 'http://localhost:8082' }
   }
 }
-base: '/api-gateway/ecso/admin/'
+base: '/api-gateway/admin/'
 ```
 
 ## 关键文件

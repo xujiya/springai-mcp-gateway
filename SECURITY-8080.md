@@ -15,18 +15,18 @@
 | # | URL | Method | 认证方式 | 敏感度 | 风险 | 状态 |
 |---|-----|--------|----------|--------|------|------|
 | 1 | `/` | GET | 无 → 404 | — | — | ✅ 已加固 (M4) |
-| 2 | `/api-gateway/ecso/auth/.well-known/oauth-authorization-server` | GET | Public | 🟢 RFC 8414 标准 | LOW | ✅ 正常 |
-| 3 | `/api-gateway/ecso/auth/oauth2/jwks` | GET | Public | 🟢 RFC 7517 标准 | LOW | ✅ 正常 |
-| 4 | `/api-gateway/ecso/auth/oauth2/authorize` | GET | Session | 🟢 标准授权流程 | LOW | ✅ 正常 |
-| 5 | `/api-gateway/ecso/auth/oauth2/token` | POST | client_auth | 🟢 标准令牌流程 | LOW | ✅ 正常 |
-| 6 | `/api-gateway/ecso/auth/oauth2/introspect` | POST | client_auth | 🟢 标准内省流程 | LOW | ✅ 正常 |
-| 7 | `/api-gateway/ecso/auth/oauth2/revoke` | POST | client_auth | 🟢 标准撤销流程 | LOW | ✅ 正常 |
-| 8 | `/api-gateway/ecso/auth/oauth2/register` | POST | denyAll / open | 🟡 DCR 受控 | LOW | ✅ 已加固 (H1) |
-| 9 | `/api-gateway/ecso/auth/login` | GET | Session | 🟢 Vue 登录页 | LOW | ✅ 正常 |
-| 10 | `/api-gateway/ecso/auth/login` | POST | Session | 🟡 用户名/密码认证 | MEDIUM | ✅ 正常 |
-| 11 | `/api-gateway/ecso/auth/oauth2/auth-info` | GET | Session | 🟢 已脱敏 | LOW | ✅ 已加固 (H2) |
-| 12 | `/api-gateway/ecso/vue/` | GET | Public | 🟢 Vue 登录 UI 静态资源 | LOW | ✅ 正常 |
-| 13 | `/api-gateway/ecso/admin/` | GET | Public | 🟡 UI 公开，API 需 admin token | LOW | ✅ 正常 |
+| 2 | `/api-gateway/auth/.well-known/oauth-authorization-server` | GET | Public | 🟢 RFC 8414 标准 | LOW | ✅ 正常 |
+| 3 | `/api-gateway/auth/oauth2/jwks` | GET | Public | 🟢 RFC 7517 标准 | LOW | ✅ 正常 |
+| 4 | `/api-gateway/auth/oauth2/authorize` | GET | Session | 🟢 标准授权流程 | LOW | ✅ 正常 |
+| 5 | `/api-gateway/auth/oauth2/token` | POST | client_auth | 🟢 标准令牌流程 | LOW | ✅ 正常 |
+| 6 | `/api-gateway/auth/oauth2/introspect` | POST | client_auth | 🟢 标准内省流程 | LOW | ✅ 正常 |
+| 7 | `/api-gateway/auth/oauth2/revoke` | POST | client_auth | 🟢 标准撤销流程 | LOW | ✅ 正常 |
+| 8 | `/api-gateway/auth/oauth2/register` | POST | denyAll / open | 🟡 DCR 受控 | LOW | ✅ 已加固 (H1) |
+| 9 | `/api-gateway/auth/login` | GET | Session | 🟢 Vue 登录页 | LOW | ✅ 正常 |
+| 10 | `/api-gateway/auth/login` | POST | Session | 🟡 用户名/密码认证 | MEDIUM | ✅ 正常 |
+| 11 | `/api-gateway/auth/oauth2/auth-info` | GET | Session | 🟢 已脱敏 | LOW | ✅ 已加固 (H2) |
+| 12 | `/api-gateway/vue/` | GET | Public | 🟢 Vue 登录 UI 静态资源 | LOW | ✅ 正常 |
+| 13 | `/api-gateway/admin/` | GET | Public | 🟡 UI 公开,API 需 admin token | LOW | ✅ 正常 |
 | 14 | `/mcp-gateway/admin/login` | POST | None (username/password) | 🔴 管理员认证入口 | HIGH | ⚠️ 见 M6 |
 | 15 | `/mcp-gateway/admin/users` | GET | Admin token | 🔴 用户列表 | MEDIUM | ✅ 正常 |
 | 16 | `/mcp-gateway/admin/users` | POST | Admin token | 🔴 用户创建 | MEDIUM | ✅ 正常 |
@@ -53,7 +53,7 @@
 - **原问题**: `POST /oauth2/register` 被 `denyAll()` 拦截后，Spring Security 默认返回 `302 Location: http://localhost:9090/vue-login`，泄露内部服务地址
 - **修复**: 自定义 `AccessDeniedHandler`，返回 `403` + JSON body，不再触发 302 重定向
 - **版本**: v0.7.0
-- **代码路径**: `EcsoAccessDeniedHandler implements AccessDeniedHandler`
+- **代码路径**: `McpAccessDeniedHandler implements AccessDeniedHandler`
 
 ### H2: auth-info 脱敏
 
@@ -71,7 +71,7 @@
       session:
         cookie:
           same-site: lax
-          path: /api-gateway/ecso/auth
+          path: /api-gateway/auth
           http-only: true
   ```
 - **版本**: v0.8.0
@@ -98,7 +98,7 @@
 
 ### M4: 根路径 / → 404
 
-- **原问题**: `GET /` 返回 HTML 页面，暴露完整路由架构（`/api-gateway/ecso/auth/**`、`/mcp-gateway/mcp` 等）
+- **原问题**: `GET /` 返回 HTML 页面,暴露完整路由架构(`/api-gateway/auth/**`、`/mcp-gateway/mcp` 等)
 - **修复**: nginx 配置 `location = / { return 404; }`
 - **版本**: v0.8.0
 
@@ -162,7 +162,7 @@ POST /mcp-gateway/admin/api-keys
 ### MCP SDK Issuer 修复 (v0.13.1)
 
 - **原问题**: `@modelcontextprotocol/client` SDK 内部做 `origin === issuer` 严格比较
-  - 经过 nginx 网关代理后，OAuth2 issuer 是 path-based URL（如 `http://host:8080/api-gateway/ecso/auth`）
+  - 经过 nginx 网关代理后,OAuth2 issuer 是 path-based URL(如 `http://host:8080/api-gateway/auth`)
   - SDK 用 `new URL(issuer).origin` 只取到 `http://host:8080`，与 issuer 不匹配 → 抛出 `IssuerMismatch` 错误
 - **修复**: Monkey-patch SDK 的 issuer 验证逻辑，允许 path-based issuer（网关代理场景）
 - **影响**: 所有使用 `@modelcontextprotocol/client` 的客户端需应用此 patch
@@ -208,7 +208,7 @@ POST /mcp-gateway/admin/api-keys
 - **修复**: nginx 层 `limit_req_zone`
   ```nginx
   limit_req_zone $binary_remote_addr zone=token:10m rate=5r/m;
-  location /api-gateway/ecso/auth/oauth2/token {
+  location /api-gateway/auth/oauth2/token {
       limit_req zone=token burst=3 nodelay;
   }
   ```
@@ -266,7 +266,7 @@ POST /mcp-gateway/admin/api-keys
                          └──────────┬───────────────────────┬───────────────┘
                                     │                       │
                     ┌───────────────┴────────┐    ┌────────┴────────────┐
-                    │  /api-gateway/ecso/*    │    │  /mcp-gateway/*     │
+                    │  /api-gateway/*    │    │  /mcp-gateway/*     │
                     │  → proxy_pass :9090     │    │  → proxy_pass :9092 │
                     │                         │    │               :9093 │
                     └───────────┬────────────┘    └────────┬────────────┘
@@ -290,8 +290,8 @@ POST /mcp-gateway/admin/api-keys
               │  └──────────────────────────┘ │  │  └──────────────────┘ │
               │                                │  │                        │
               │  ┌─ Vue Static ─────────────┐ │  │  ┌─ RFC 9728 ───────┐ │
-              │  │ /ecso/vue/ (login UI)    │ │  │  │ .well-known/oauth│ │
-              │  │ /ecso/admin/ (admin UI)  │ │  │  │ -protected-res.  │ │
+              │  │ /vue/ (login UI)    │ │  │  │ .well-known/oauth│ │
+              │  │ /admin/ (admin UI)  │ │  │  │ -protected-res.  │ │
               │  └──────────────────────────┘ │  │  └──────────────────┘ │
               └────────────────────────────────┘  └────────────────────────┘
 ```
@@ -425,7 +425,7 @@ Admin                           nginx:8080                    mcp-server:9092
 - [ ] 黑盒扫描确认 `Server` 头无版本号
 - [ ] 验证 DCR 端点返回 403 JSON（非 302）
 - [ ] 验证 auth-info 响应无 clientId/redirectUri
-- [ ] 验证 Cookie 属性: SameSite=Lax, Path=/api-gateway/ecso/auth, HttpOnly, Secure
+- [ ] 验证 Cookie 属性: SameSite=Lax, Path=/api-gateway/auth, HttpOnly, Secure
 - [ ] 验证 CORS 拒绝未知 Origin
 - [ ] 验证 Token 端点速率限制生效
 - [ ] 验证 admin 默认密码已修改

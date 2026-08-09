@@ -1,6 +1,6 @@
 # Auth Server — Spring Authorization Server + DCR + MySQL
 
-> v0.13.1 封板 | 端口: 9090 | 内部 issuer: `http://localhost:9090` | 公开: `http://localhost:8080/api-gateway/ecso/auth`
+> v0.13.1 封板 | 端口: 9090 | 内部 issuer: `http://localhost:9090` | 公开: `http://localhost:8080/api-gateway/auth`
 
 ## 功能
 
@@ -45,14 +45,14 @@ server:
     session:
       cookie:
         name: MCP_AUTHORIZATION_SERVER_SESSIONID
-        path: /api-gateway/ecso/auth
+        path: /api-gateway/auth
         http-only: true
         same-site: lax
 ```
 
 ## Cookie 安全
 
-- `Path=/api-gateway/ecso/auth` — 限制作用域
+- `Path=/api-gateway/auth` — 限制作用域
 - `HttpOnly` — JavaScript 不可读
 - `SameSite=Lax` — 防 CSRF
 - 生产环境加 `Secure: true`
@@ -103,7 +103,7 @@ auth-server/src/main/java/
 ### client_credentials (预注册客户端)
 
 ```bash
-curl -X POST http://localhost:8080/api-gateway/ecso/auth/oauth2/token \
+curl -X POST http://localhost:8080/api-gateway/auth/oauth2/token \
   -d "grant_type=client_credentials&client_id=springai-gateway-client&client_secret=secret&scope=mcp:read"
 ```
 

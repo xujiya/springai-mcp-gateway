@@ -1,4 +1,4 @@
-# ECSO MCP Gateway — 完整安全参考项目
+# MCP Gateway — 完整安全参考项目
 
 > 封板版本: **v0.13.1** | 最后更新: 2026-08-10
 
@@ -87,13 +87,13 @@ nginx
 
 ```bash
 # AS Metadata
-curl http://localhost:8080/api-gateway/ecso/auth/.well-known/oauth-authorization-server
+curl http://localhost:8080/api-gateway/auth/.well-known/oauth-authorization-server
 
 # PRM (Weather)
 curl http://localhost:8080/mcp-gateway/weather/.well-known/oauth-protected-resource
 
 # 管理控制台
-open http://localhost:8080/api-gateway/ecso/admin/
+open http://localhost:8080/api-gateway/admin/
 ```
 
 ## 核心架构
@@ -115,7 +115,7 @@ open http://localhost:8080/api-gateway/ecso/admin/
 /mcp-gateway/mcp          →  404  (统一端点已移除)
 ```
 
-新增 MCP 后端 = 在 `mcp-gateway/application.yml` 的 `ecso.mcp.services` 下加一行 + 重启。
+新增 MCP 后端 = 在 `mcp-gateway/application.yml` 的 `mcp.services` 下加一行 + 重启。
 
 ### 认证模式
 
@@ -137,7 +137,7 @@ open http://localhost:8080/api-gateway/ecso/admin/
 ## MCP SDK RFC 8414 §3.3 修复
 
 **问题**: `@modelcontextprotocol/client` v2.0.0-beta.5 用 `new URL(asUrl).origin === issuer` 校验，
-当 issuer 带路径 (`http://localhost:8080/api-gateway/ecso/auth`) 与 origin (`http://localhost:8080`) 不匹配时报错。
+当 issuer 带路径 (`http://localhost:8080/api-gateway/auth`) 与 origin (`http://localhost:8080`) 不匹配时报错。
 
 **修复**: Patch SDK 允许同 origin 的 path-based issuer:
 
@@ -168,20 +168,19 @@ mcp:
 ### MCP Gateway (`mcp-gateway/application.yml`)
 
 ```yaml
-ecso:
-  mcp:
-    services:
-      weather:
-        url: http://localhost:9092/mcp
-      climate:
-        url: http://localhost:9093/mcp
-  auth-server:
-    public-url: http://localhost:8080/api-gateway/ecso/auth
-  mcp-server:
-    public-url: http://localhost:8080/mcp-gateway
-  api-key:
-    admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7    # dev
-    # admin-token-hash: {bcrypt}$2a$10$...                 # production
+mcp:
+  services:
+    weather:
+      url: http://localhost:9092/mcp
+    climate:
+      url: http://localhost:9093/mcp
+auth-server:
+  public-url: http://localhost:8080/api-gateway/auth
+mcp-server:
+  public-url: http://localhost:8080/mcp-gateway
+api-key:
+  admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7    # dev
+  # admin-token-hash: {bcrypt}$2a$10$...                 # production
 ```
 
 ### Nginx — **不要修改!**

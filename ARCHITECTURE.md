@@ -1,4 +1,4 @@
-# ECSO MCP Gateway 系统 — 完整架构文档
+# MCP Gateway 系统 — 完整架构文档
 
 > 最后更新: 2026-08-10 (封板 v0.13.1)
 > 项目根目录: `D:/AI Coding/mcp-gateways/springai-mcp-gateway/`
@@ -138,7 +138,7 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 │OAuth2 +   │ │Vue SPA     │  │4 MCP Tools:          │
 │ DCR +     │ │base:       │  │ • getWeatherForecast │
 │ Login     │ │/api-gateway│  │ • getAlerts          │
-│  /vue-login│ │/ecso/vue/  │  │ • gw_m_c_w_weather_ │
+│  /vue-login│ │/vue/  │  │ • gw_m_c_w_weather_ │
 │  → 302    │ │            │  │   getWeatherForecast │
 │            │ │proxy:      │  │ • gw_m_c_w_weather_ │
 │            │ │/api-gateway│  │   getAlerts          │
@@ -160,15 +160,15 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 │     → { resource, authorization_servers }            │
 │                                                      │
 │  3. GET /.well-known/oauth-authorization-server/     │
-│     api-gateway/ecso/auth                            │
+│     api-gateway/auth                            │
 │     → AS metadata (RFC 8414)                         │
 │                                                      │
-│  4. POST /api-gateway/ecso/auth/oauth2/register      │
+│  4. POST /api-gateway/auth/oauth2/register      │
 │     → { client_id, client_secret }  (DCR)            │
 │                                                      │
 │  5. 打开浏览器 → authorize → 用户登录 → callback     │
 │                                                      │
-│  6. POST /api-gateway/ecso/auth/oauth2/token         │
+│  6. POST /api-gateway/auth/oauth2/token         │
 │     → { access_token }                               │
 │                                                      │
 │  7. POST /mcp-gateway/mcp                            │
@@ -183,8 +183,8 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 ┌─────────────────────────────────────────────────────────┐
 │                    公网 (Nginx :8080)                    │
 │                                                         │
-│  /api-gateway/ecso/vue/**      → 公开 (Vue 前端)        │
-│  /api-gateway/ecso/auth/**    → 部分公开 (白名单)       │
+│  /api-gateway/vue/**      → 公开 (Vue 前端)        │
+│  /api-gateway/auth/**    → 部分公开 (白名单)       │
 │  /mcp-gateway/mcp             → 需 Bearer Token         │
 │  /.well-known/oauth-**        → 公开 (RFC 8414 发现)    │
 │  /mcp-gateway/.well-known/**  → 公开 (资源元数据)       │
@@ -209,59 +209,59 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 ```
 浏览器
   │
-  │ GET /api-gateway/ecso/vue/              (入口)
-  │ GET /api-gateway/ecso/vue/assets/index-xxx.js
-  │ GET /api-gateway/ecso/vue/assets/index-xxx.css
+  │ GET /api-gateway/vue/              (入口)
+  │ GET /api-gateway/vue/assets/index-xxx.js
+  │ GET /api-gateway/vue/assets/index-xxx.css
   │
   ▼
 Nginx (:8080)
   │  location /api-gateway/ { proxy_pass http://127.0.0.1:8081/; }
   │  ⚠️ trailing slash 剥掉 /api-gateway/ 前缀
   │
-  │ 转发路径: /ecso/vue/  (无 /api-gateway/ 前缀)
+  │ 转发路径: /vue/  (无 /api-gateway/ 前缀)
   │
   ▼
 API Gateway (:8081)
-  │  路由 vue-login:  Path=/ecso/vue        → RewritePath → /api-gateway/ecso/vue/
-  │  路由 vue-assets: Path=/ecso/vue/**     → RewritePath → /api-gateway/ecso/vue/${path}
+  │  路由 vue-login:  Path=/vue        → RewritePath → /api-gateway/vue/
+  │  路由 vue-assets: Path=/vue/**     → RewritePath → /api-gateway/vue/${path}
   │  ⚠️ 加回 /api-gateway/ 前缀! (因为 Vite base 含此前缀)
   │
-  │ 转发路径: /api-gateway/ecso/vue/        (含 /api-gateway/ 前缀)
+  │ 转发路径: /api-gateway/vue/        (含 /api-gateway/ 前缀)
   │
   ▼
 Vite Dev Server (:9091)
-  │  base: /api-gateway/ecso/vue/
-  │  匹配 /api-gateway/ecso/vue/ → 返回 index.html
-  │  匹配 /api-gateway/ecso/vue/assets/* → 返回静态资源
+  │  base: /api-gateway/vue/
+  │  匹配 /api-gateway/vue/ → 返回 index.html
+  │  匹配 /api-gateway/vue/assets/* → 返回静态资源
   │
   ▼
 浏览器渲染 Vue SPA
 ```
 
-**关键点**：Nginx 剥 `/api-gateway/`，API Gateway 加回 `/api-gateway/`，因为 Vite 的 `base` 配置包含此前缀，资源 URL 都以 `/api-gateway/ecso/vue/` 开头。
+**关键点**：Nginx 剥 `/api-gateway/`，API Gateway 加回 `/api-gateway/`，因为 Vite 的 `base` 配置包含此前缀，资源 URL 都以 `/api-gateway/vue/` 开头。
 
 ### 4.2 Auth 请求
 
 ```
 浏览器 / MCP 客户端
   │
-  │ GET /api-gateway/ecso/auth/.well-known/openid-configuration
-  │ POST /api-gateway/ecso/auth/oauth2/register
-  │ POST /api-gateway/ecso/auth/oauth2/token
-  │ GET /api-gateway/ecso/auth/oauth2/authorize?...
-  │ POST /api-gateway/ecso/auth/login
+  │ GET /api-gateway/auth/.well-known/openid-configuration
+  │ POST /api-gateway/auth/oauth2/register
+  │ POST /api-gateway/auth/oauth2/token
+  │ GET /api-gateway/auth/oauth2/authorize?...
+  │ POST /api-gateway/auth/login
   │
   ▼
 Nginx (:8080)
   │  location /api-gateway/ { proxy_pass http://127.0.0.1:8081/; }
   │  ⚠️ 剥掉 /api-gateway/ 前缀
   │
-  │ 转发路径: /ecso/auth/oauth2/authorize  (无 /api-gateway/ 前缀)
+  │ 转发路径: /auth/oauth2/authorize  (无 /api-gateway/ 前缀)
   │
   ▼
 API Gateway (:8081)
-  │  路由匹配: Path=/ecso/auth/oauth2/authorize
-  │  StripPrefix=2  → 剥掉 /ecso/auth/
+  │  路由匹配: Path=/auth/oauth2/authorize
+  │  StripPrefix=1  → 剥掉 /auth/
   │
   │ 转发路径: /oauth2/authorize
   │
@@ -273,10 +273,10 @@ Auth Server (:9090)
   ▼
 API Gateway (:8081) — 响应后处理
   │  RewriteResponseHeader (post-filter, 逆序执行):
-  │    ① 先执行: ^http://localhost:9090/vue-login → http://localhost:8080/api-gateway/ecso/vue/
-  │    ② 后执行: ^http://localhost:9090/          → http://localhost:8080/api-gateway/ecso/auth/
+  │    ① 先执行: ^http://localhost:9090/vue-login → http://localhost:8080/api-gateway/vue/
+  │    ② 后执行: ^http://localhost:9090/          → http://localhost:8080/api-gateway/auth/
   │
-  │  结果 Location: http://localhost:8080/api-gateway/ecso/vue/;SESSIONID=xxx
+  │  结果 Location: http://localhost:8080/api-gateway/vue/;SESSIONID=xxx
   │
   ▼
 浏览器 → 跟随 302 → 加载 Vue 登录页
@@ -319,7 +319,7 @@ Weather MCP Server (:9092)
 ```
 MCP 客户端
   │
-  │ GET /.well-known/oauth-authorization-server/api-gateway/ecso/auth
+  │ GET /.well-known/oauth-authorization-server/api-gateway/auth
   │ (按 RFC 8414: <origin>/.well-known/oauth-authorization-server/<issuer_path>)
   │
   ▼
@@ -327,7 +327,7 @@ Nginx (:8080)
   │  location /.well-known/ { proxy_pass http://127.0.0.1:8081; }
   │  ⚠️ 无 trailing slash，不剥前缀！
   │
-  │ 转发路径: /.well-known/oauth-authorization-server/api-gateway/ecso/auth
+  │ 转发路径: /.well-known/oauth-authorization-server/api-gateway/auth
   │           (完整路径保留)
   │
   ▼
@@ -335,7 +335,7 @@ API Gateway (:8081)
   │  路由 rfc8414-well-known-first:
   │    Path=/.well-known/oauth-authorization-server/**
   │    RewritePath: /.well-known/oauth-authorization-server/.* → /.well-known/openid-configuration
-  │    RewriteAuthUrls: http://localhost:9090 → http://localhost:8080/api-gateway/ecso/auth
+  │    RewriteAuthUrls: http://localhost:9090 → http://localhost:8080/api-gateway/auth
   │
   │ 转发路径: /.well-known/openid-configuration
   │
@@ -346,7 +346,7 @@ Auth Server (:9090)
   ▼
 API Gateway (:8081) — 响应后处理
   │  RewriteAuthUrls 过滤器:
-  │    JSON body 中 http://localhost:9090 → http://localhost:8080/api-gateway/ecso/auth
+  │    JSON body 中 http://localhost:9090 → http://localhost:8080/api-gateway/auth
   │
   │  结果: 所有 URL 指向公网地址
 ```
@@ -370,7 +370,7 @@ MCP Gateway (:8082)
   │  返回 Protected Resource Metadata:
   │  {
   │    "resource": "http://localhost:8080/mcp-gateway/mcp",
-  │    "authorization_servers": ["http://localhost:8080/api-gateway/ecso/auth"],
+  │    "authorization_servers": ["http://localhost:8080/api-gateway/auth"],
   │    "resource_name": "Spring MCP Gateway",
   │    "bearer_methods_supported": ["header"],
   │    "scopes_supported": ["mcp:read", "mcp:write"]
@@ -382,12 +382,12 @@ MCP Gateway (:8082)
 ```
 Vue SPA (浏览器)
   │
-  │ POST /api-gateway/ecso/auth/login
-  │ (gatewayPrefix = '/api-gateway/ecso/auth', 由 pathname.indexOf('/ecso') 动态计算)
+  │ POST /api-gateway/auth/login
+  │ (gatewayPrefix = '/api-gateway/auth', 由 pathname.indexOf('/auth') 动态计算)
   │
   ▼
 Nginx (:8080) → API Gateway (:8081)
-  │  StripPrefix=2 → /login
+  │  StripPrefix=1 → /login
   │
   ▼
 Auth Server (:9090)
@@ -395,7 +395,7 @@ Auth Server (:9090)
   │
   ▼
 API Gateway (:8081) — RewriteResponseHeader
-  │  Location: http://localhost:8080/api-gateway/ecso/auth/oauth2/authorize?...
+  │  Location: http://localhost:8080/api-gateway/auth/oauth2/authorize?...
   │
   ▼
 浏览器 → 跟随 302 → 授权确认 → 302 → callback?code=xxx
@@ -442,7 +442,7 @@ server {
     # 默认首页
     location / {
         default_type text/html;
-        return 200 '<h1>ECSO Gateway</h1>...';
+        return 200 '<h1>MCP Gateway</h1>...';
     }
 }
 ```
@@ -451,9 +451,9 @@ server {
 
 | 请求路径 | 匹配 location | 转发到 | 转发路径 | 说明 |
 |----------|--------------|--------|----------|------|
-| `/.well-known/oauth-authorization-server/api-gateway/ecso/auth` | `/.well-known/` | :8081 | **原路径不变** | 无 trailing slash，不剥前缀 |
-| `/api-gateway/ecso/vue/` | `/api-gateway/` | :8081 | `/ecso/vue/` | 剥 `/api-gateway/` |
-| `/api-gateway/ecso/auth/oauth2/token` | `/api-gateway/` | :8081 | `/ecso/auth/oauth2/token` | 剥 `/api-gateway/` |
+| `/.well-known/oauth-authorization-server/api-gateway/auth` | `/.well-known/` | :8081 | **原路径不变** | 无 trailing slash，不剥前缀 |
+| `/api-gateway/vue/` | `/api-gateway/` | :8081 | `/vue/` | 剥 `/api-gateway/` |
+| `/api-gateway/auth/oauth2/token` | `/api-gateway/` | :8081 | `/auth/oauth2/token` | 剥 `/api-gateway/` |
 | `/mcp-gateway/mcp` | `/mcp-gateway/` | :8082 | `/mcp` | 剥 `/mcp-gateway/` |
 | `/mcp-gateway/.well-known/...` | `/mcp-gateway/` | :8082 | `/.well-known/...` | 剥 `/mcp-gateway/` |
 | `/其他` | `/` | — | — | 返回 200 HTML 首页 |
@@ -474,28 +474,28 @@ server {
 | # | ID | 路径谓词 | 目标 URI | 核心过滤器 | 说明 |
 |---|-----|---------|----------|-----------|------|
 | 1 | `rfc8414-well-known-first` | `/.well-known/oauth-authorization-server/**` | :9090 | RewritePath + RewriteAuthUrls | RFC 8414 AS 发现 |
-| 2 | `auth-well-known` | `/ecso/auth/.well-known/**` | :9090 | StripPrefix=2 + RewriteAuthUrls | AS 元数据 (标准路径) |
-| 3 | `auth-register` | `/ecso/auth/oauth2/register` | :9090 | StripPrefix=2 | DCR 注册 |
-| 4 | `auth-token` | `/ecso/auth/oauth2/token` | :9090 | StripPrefix=2 | Token 端点 |
-| 5 | `auth-jwks` | `/ecso/auth/oauth2/jwks` | :9090 | StripPrefix=2 | JWKS |
-| 6 | `auth-authorize` | `/ecso/auth/oauth2/authorize` | :9090 | StripPrefix=2 + RewriteResponseHeader×2 | 授权端点 |
-| 7 | `auth-login` | `/ecso/auth/login` | :9090 | StripPrefix=2 + RewriteResponseHeader×2 | 登录 POST |
-| 8 | `auth-info` | `/ecso/auth/oauth2/auth-info` | :9090 | StripPrefix=2 | Auth 信息 API |
-| 9 | `vue-login` | `/ecso/vue` | :9091 | RewritePath | Vue 登录页 (精确匹配) |
-| 10 | `vue-assets` | `/ecso/vue/**` | :9091 | RewritePath | Vue 子路由 & 静态资源 |
-| 11 | `auth-other` | `/ecso/auth/**` | :9090 | StripPrefix=2 + RewriteAuthUrls + RewriteResponseHeader×2 | 兜底: 其他 Auth 路由 |
+| 2 | `auth-well-known` | `/auth/.well-known/**` | :9090 | StripPrefix=1 + RewriteAuthUrls | AS 元数据 (标准路径) |
+| 3 | `auth-register` | `/auth/oauth2/register` | :9090 | StripPrefix=1 | DCR 注册 |
+| 4 | `auth-token` | `/auth/oauth2/token` | :9090 | StripPrefix=1 | Token 端点 |
+| 5 | `auth-jwks` | `/auth/oauth2/jwks` | :9090 | StripPrefix=1 | JWKS |
+| 6 | `auth-authorize` | `/auth/oauth2/authorize` | :9090 | StripPrefix=1 + RewriteResponseHeader×2 | 授权端点 |
+| 7 | `auth-login` | `/auth/login` | :9090 | StripPrefix=1 + RewriteResponseHeader×2 | 登录 POST |
+| 8 | `auth-info` | `/auth/oauth2/auth-info` | :9090 | StripPrefix=1 | Auth 信息 API |
+| 9 | `vue-login` | `/vue` | :9091 | RewritePath | Vue 登录页 (精确匹配) |
+| 10 | `vue-assets` | `/vue/**` | :9091 | RewritePath | Vue 子路由 & 静态资源 |
+| 11 | `auth-other` | `/auth/**` | :9090 | StripPrefix=1 + RewriteAuthUrls + RewriteResponseHeader×2 | 兜底: 其他 Auth 路由 |
 
 ### 6.2 过滤器详解
 
-#### StripPrefix=2
-剥掉路径前 2 段：`/ecso/auth/oauth2/token` → `/oauth2/token`
+#### StripPrefix=1
+剥掉路径前 1 段：`/auth/oauth2/token` → `/oauth2/token`
 
 #### RewritePath
 | 路由 | 输入 | 输出 | 说明 |
 |------|------|------|------|
 | rfc8414 | `/.well-known/oauth-authorization-server/任意` | `/.well-known/openid-configuration` | 重写到标准 AS 元数据路径 |
-| vue-login | `/ecso/vue` | `/api-gateway/ecso/vue/` | 加回 `/api-gateway/` + 尾部斜杠 |
-| vue-assets | `/ecso/vue/(path)` | `/api-gateway/ecso/vue/(path)` | 加回 `/api-gateway/` 前缀 |
+| vue-login | `/vue` | `/api-gateway/vue/` | 加回 `/api-gateway/` + 尾部斜杠 |
+| vue-assets | `/vue/(path)` | `/api-gateway/vue/(path)` | 加回 `/api-gateway/` 前缀 |
 
 #### RewriteResponseHeader (Location 头重写)
 
@@ -503,8 +503,8 @@ server {
 
 | 路由 | 声明顺序 | regex | replacement | 实际执行顺序 |
 |------|---------|-------|-------------|------------|
-| auth-authorize/login/other | ① 先声明 | `^http://localhost:9090/` | `http://localhost:8080/api-gateway/ecso/auth/` | 后执行 (通用兜底) |
-| auth-authorize/login/other | ② 后声明 | `^http://localhost:9090/vue-login` | `http://localhost:8080/api-gateway/ecso/vue/` | 先执行 (精确匹配) |
+| auth-authorize/login/other | ① 先声明 | `^http://localhost:9090/` | `http://localhost:8080/api-gateway/auth/` | 后执行 (通用兜底) |
+| auth-authorize/login/other | ② 后声明 | `^http://localhost:9090/vue-login` | `http://localhost:8080/api-gateway/vue/` | 先执行 (精确匹配) |
 
 **执行逻辑**：
 1. 先检查 `Location` 是否匹配 `^http://localhost:9090/vue-login` → 替换为 Vue 登录页
@@ -517,7 +517,7 @@ server {
 自定义过滤器 `RewriteAuthUrlsGatewayFilterFactory`，处理 JSON 响应体中的内部 URL：
 
 ```
-http://localhost:9090  →  http://localhost:8080/api-gateway/ecso/auth
+http://localhost:9090  →  http://localhost:8080/api-gateway/auth
 ```
 
 仅在 `Content-Type: application/json` 或 `application/jwk-set+json` 时生效。
@@ -525,18 +525,17 @@ http://localhost:9090  →  http://localhost:8080/api-gateway/ecso/auth
 ### 6.3 白名单 (12 条公开路径)
 
 ```yaml
-ecso:
   whitelist:
     paths:
       - /.well-known/oauth-authorization-server/**   # RFC 8414 AS 发现
-      - /ecso/auth/.well-known/**                     # AS 元数据
-      - /ecso/auth/oauth2/register                    # DCR 注册
-      - /ecso/auth/oauth2/token                       # Token 端点
-      - /ecso/auth/oauth2/authorize                   # 授权端点
-      - /ecso/auth/oauth2/jwks                        # JWKS
-      - /ecso/auth/login                              # 登录 POST
-      - /ecso/auth/oauth2/auth-info                   # Auth 信息
-      - /ecso/vue/**                                  # Vue 前端 (全部公开)
+      - /auth/.well-known/**                     # AS 元数据
+      - /auth/oauth2/register                    # DCR 注册
+      - /auth/oauth2/token                       # Token 端点
+      - /auth/oauth2/authorize                   # 授权端点
+      - /auth/oauth2/jwks                        # JWKS
+      - /auth/login                              # 登录 POST
+      - /auth/oauth2/auth-info                   # Auth 信息
+      - /vue/**                                  # Vue 前端 (全部公开)
 ```
 
 不在白名单中的路径需要 Bearer Token (JWT) 认证。
@@ -580,7 +579,7 @@ mcp:
   ├─ 所有请求需认证 (anyRequest().authenticated())
   │
   ├─ McpServerOAuth2Configurer:
-  │    ├─ authorizationServer: http://localhost:8080/api-gateway/ecso/auth
+  │    ├─ authorizationServer: http://localhost:8080/api-gateway/auth
   │    ├─ resource: http://localhost:8080/mcp-gateway/mcp
   │    ├─ resourceName: "Spring MCP Gateway"
   │    ├─ bearerMethod: "header"
@@ -666,8 +665,8 @@ mcp:
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-  <script type="module" src="/api-gateway/ecso/vue/assets/index-DBNAin-e.js"></script>
-  <link rel="stylesheet" href="/api-gateway/ecso/vue/assets/index-D4U55mnN.css">
+  <script type="module" src="/api-gateway/vue/assets/index-DBNAin-e.js"></script>
+  <link rel="stylesheet" href="/api-gateway/vue/assets/index-D4U55mnN.css">
 </head>
 <body>
   <div id="app"></div>
@@ -675,14 +674,14 @@ mcp:
 </html>
 ```
 
-> 资源路径使用公网地址 `/api-gateway/ecso/vue/assets/...`，浏览器直接请求 Nginx。
+> 资源路径使用公网地址 `/api-gateway/vue/assets/...`，浏览器直接请求 Nginx。
 
 ### 8.4 issuer 与公网地址
 
 | 用途 | URL |
 |------|-----|
 | 内部 issuer | `http://localhost:9090` |
-| 公网 issuer | `http://localhost:8080/api-gateway/ecso/auth` |
+| 公网 issuer | `http://localhost:8080/api-gateway/auth` |
 | JWT 验证用 | 内部 issuer (直连 :9090 获取 JWKS) |
 | 外部暴露用 | 公网 issuer (通过 Gateway RewriteAuthUrls 重写) |
 
@@ -694,12 +693,12 @@ mcp:
 
 ```js
 export default defineConfig({
-  base: '/api-gateway/ecso/vue/',    // 资源 URL 前缀
+  base: '/api-gateway/vue/',    // 资源 URL 前缀
   server: {
     port: 9091,
     proxy: {
       // 开发模式: API 请求代理到 api-gateway
-      '/api-gateway/ecso/auth': {
+      '/api-gateway/auth': {
         target: 'http://localhost:8081',
         rewrite: (path) => path.replace(/^\/api-gateway/, ''),
       },
@@ -708,7 +707,7 @@ export default defineConfig({
 })
 ```
 
-**base = `/api-gateway/ecso/vue/`** 的原因：
+**base = `/api-gateway/vue/`** 的原因：
 - 浏览器解析 JS/CSS 资源时，URL 包含 `/api-gateway/` 前缀
 - 这样请求能匹配 Nginx 的 `location /api-gateway/`
 - 经过 Nginx → API Gateway → Vite 链路正确返回资源
@@ -718,27 +717,27 @@ export default defineConfig({
 ```js
 // 根据 URL 路径自动检测是否在网关后面
 const _pathname = window.location.pathname
-const _idx = _pathname.indexOf('/ecso')
-const gatewayPrefix = _idx >= 0 ? _pathname.slice(0, _idx) + '/ecso/auth' : ''
+const _idx = _pathname.indexOf('/auth')
+const gatewayPrefix = _idx >= 0 ? _pathname.slice(0, _idx) + '/auth' : ''
 const loginAction = gatewayPrefix + '/login'
 ```
 
 **工作原理**：
-- URL = `http://localhost:8080/api-gateway/ecso/vue/` → indexOf('/ecso') = 14
-- gatewayPrefix = `/api-gateway/ecso/auth`
-- 登录表单 action = `/api-gateway/ecso/auth/login`
-- auth-info 请求 = `/api-gateway/ecso/auth/oauth2/auth-info`
+- URL = `http://localhost:8080/api-gateway/vue/` → indexOf('/auth') = 14
+- gatewayPrefix = `/api-gateway/auth`
+- 登录表单 action = `/api-gateway/auth/login`
+- auth-info 请求 = `/api-gateway/auth/oauth2/auth-info`
 
-> 这样无论部署在 `/api-gateway/ecso/` 还是直接 `/ecso/` 后面，都能自动适配。
+> 这样无论部署在 `/api-gateway/` 还是直接 `/` 后面，都能自动适配。
 
 ### 9.3 开发模式代理
 
 Vite dev server 的 proxy 仅用于**开发模式直接访问 :9091** 的场景：
 
 ```
-浏览器 → :9091/api-gateway/ecso/auth/login
+浏览器 → :9091/api-gateway/auth/login
        → Vite proxy 剥 /api-gateway
-       → :8081/ecso/auth/login
+       → :8081/auth/login
        → API Gateway → Auth Server
 ```
 
@@ -752,22 +751,22 @@ Vite dev server 的 proxy 仅用于**开发模式直接访问 :9091** 的场景�
 
 | # | 方法 | 公网 URL | 状态码 | 说明 |
 |---|------|----------|--------|------|
-| 1 | GET | `http://localhost:8080/api-gateway/ecso/vue/` | 200 | Vue 登录页 (index.html) |
-| 2 | GET | `http://localhost:8080/api-gateway/ecso/vue` | 200 | 同上 (无尾部斜杠，Gateway 加斜杠) |
-| 3 | GET | `http://localhost:8080/api-gateway/ecso/vue/assets/*` | 200 | JS/CSS 静态资源 |
+| 1 | GET | `http://localhost:8080/api-gateway/vue/` | 200 | Vue 登录页 (index.html) |
+| 2 | GET | `http://localhost:8080/api-gateway/vue` | 200 | 同上 (无尾部斜杠，Gateway 加斜杠) |
+| 3 | GET | `http://localhost:8080/api-gateway/vue/assets/*` | 200 | JS/CSS 静态资源 |
 
 ### 10.2 OAuth2 / Auth 接口
 
 | # | 方法 | 公网 URL | 状态码 | 说明 |
 |---|------|----------|--------|------|
-| 4 | GET | `http://localhost:8080/api-gateway/ecso/auth/.well-known/openid-configuration` | 200 | AS 元数据 |
-| 5 | GET | `http://localhost:8080/.well-known/oauth-authorization-server/api-gateway/ecso/auth` | 200 | RFC 8414 AS 发现 |
-| 6 | POST | `http://localhost:8080/api-gateway/ecso/auth/oauth2/register` | 201 | DCR 注册 |
-| 7 | POST | `http://localhost:8080/api-gateway/ecso/auth/oauth2/token` | 200 | Token 端点 |
-| 8 | GET | `http://localhost:8080/api-gateway/ecso/auth/oauth2/authorize?...` | 302 | 授权端点 (重定向到登录) |
-| 9 | POST | `http://localhost:8080/api-gateway/ecso/auth/login` | 302 | 登录处理 (重定向到授权) |
-| 10 | GET | `http://localhost:8080/api-gateway/ecso/auth/oauth2/jwks` | 200 | JWKS |
-| 11 | GET | `http://localhost:8080/api-gateway/ecso/auth/oauth2/auth-info` | 200 | Auth 信息 API |
+| 4 | GET | `http://localhost:8080/api-gateway/auth/.well-known/openid-configuration` | 200 | AS 元数据 |
+| 5 | GET | `http://localhost:8080/.well-known/oauth-authorization-server/api-gateway/auth` | 200 | RFC 8414 AS 发现 |
+| 6 | POST | `http://localhost:8080/api-gateway/auth/oauth2/register` | 201 | DCR 注册 |
+| 7 | POST | `http://localhost:8080/api-gateway/auth/oauth2/token` | 200 | Token 端点 |
+| 8 | GET | `http://localhost:8080/api-gateway/auth/oauth2/authorize?...` | 302 | 授权端点 (重定向到登录) |
+| 9 | POST | `http://localhost:8080/api-gateway/auth/login` | 302 | 登录处理 (重定向到授权) |
+| 10 | GET | `http://localhost:8080/api-gateway/auth/oauth2/jwks` | 200 | JWKS |
+| 11 | GET | `http://localhost:8080/api-gateway/auth/oauth2/auth-info` | 200 | Auth 信息 API |
 
 ### 10.3 MCP 接口
 
@@ -888,26 +887,26 @@ GET http://localhost:8080/mcp-gateway/.well-known/oauth-protected-resource/mcp
 
 Step 3: RFC 8414 发现 Authorization Server
 ─────────────────────────────────────────────────────
-GET http://localhost:8080/.well-known/oauth-authorization-server/api-gateway/ecso/auth
+GET http://localhost:8080/.well-known/oauth-authorization-server/api-gateway/auth
   → 200 (AS metadata, 所有 URL 已重写为公网地址)
 
 Step 4: DCR 动态注册
 ─────────────────────────────────────────────────────
-POST http://localhost:8080/api-gateway/ecso/auth/oauth2/register
+POST http://localhost:8080/api-gateway/auth/oauth2/register
   Content-Type: application/json
   Body: { "client_name": "...", "grant_types": [...], "scope": "..." }
   → 201 { "client_id": "...", "client_secret": "..." }
 
 Step 5: 浏览器授权 (authorization_code flow)
 ─────────────────────────────────────────────────────
-浏览器打开: http://localhost:8080/api-gateway/ecso/auth/oauth2/authorize?...
+浏览器打开: http://localhost:8080/api-gateway/auth/oauth2/authorize?...
   → 302 → Vue 登录页
   → 用户输入 user/password → 提交
   → 302 → callback?code=xxx&state=yyy
 
 Step 5-alt: 或自动获取 Token (client_credentials flow)
 ─────────────────────────────────────────────────────
-POST http://localhost:8080/api-gateway/ecso/auth/oauth2/token
+POST http://localhost:8080/api-gateway/auth/oauth2/token
   grant_type=client_credentials&client_id=...&client_secret=...&scope=mcp:read+mcp:write
   → 200 { "access_token": "...", "expires_in": 300 }
 
@@ -973,8 +972,8 @@ pi 的 OAuth2 流程 (nginx access log 实测):
 POST /mcp-gateway/mcp                    → 401  (发现需认证)
 GET /mcp-gateway/.well-known/.../mcp     → 200  (Protected Resource Metadata)
 GET /.well-known/oauth-.../api-.../auth  → 200  (RFC 8414 AS 发现)
-POST /api-gateway/ecso/auth/oauth2/register → 201  (DCR 注册)
-GET /api-gateway/ecso/auth/oauth2/authorize → 302  (浏览器授权)
+POST /api-gateway/auth/oauth2/register → 201  (DCR 注册)
+GET /api-gateway/auth/oauth2/authorize → 302  (浏览器授权)
 ```
 
 ### 13.3 不支持 RFC 9728 的客户端
@@ -999,33 +998,33 @@ GET /api-gateway/ecso/auth/oauth2/authorize → 302  (浏览器授权)
 
 ```
 Step 1:  浏览器访问 Vue 登录页
-         GET /api-gateway/ecso/vue/ → 200
+         GET /api-gateway/vue/ → 200
 
 Step 2:  加载 JS/CSS 资源
-         GET /api-gateway/ecso/vue/assets/index-xxx.js → 200
-         GET /api-gateway/ecso/vue/assets/index-xxx.css → 200
+         GET /api-gateway/vue/assets/index-xxx.js → 200
+         GET /api-gateway/vue/assets/index-xxx.css → 200
 
 Step 3:  Vue App 动态检测 gateway prefix
-         pathname.indexOf('/ecso') → gatewayPrefix = /api-gateway/ecso/auth
+         pathname.indexOf('/auth') → gatewayPrefix = /api-gateway/auth
 
 Step 4:  Vue 获取 auth-info
-         GET /api-gateway/ecso/auth/oauth2/auth-info → 200
+         GET /api-gateway/auth/oauth2/auth-info → 200
 
 Step 5:  用户提交登录表单
-         POST /api-gateway/ecso/auth/login (username=user, password=password)
+         POST /api-gateway/auth/login (username=user, password=password)
 
 Step 6:  Auth Server 返回 302 → 授权确认
-         Location: /api-gateway/ecso/auth/oauth2/authorize?...
+         Location: /api-gateway/auth/oauth2/authorize?...
 
 Step 7:  授权确认 → 302 → callback
          Location: http://localhost:62211/callback?code=xxx&state=yyy
 
 Step 8:  MCP 客户端用 code 换 Token
-         POST /api-gateway/ecso/auth/oauth2/token
+         POST /api-gateway/auth/oauth2/token
          → { access_token: "..." }
 
 Step 9:  MCP 客户端获取 JWKS 验证 JWT
-         GET /api-gateway/ecso/auth/oauth2/jwks → 200
+         GET /api-gateway/auth/oauth2/jwks → 200
 
 Step 10: MCP initialize
          POST /mcp-gateway/mcp (Bearer Token)
@@ -1048,27 +1047,27 @@ Step 12: MCP tools/list 或 tools/call
 | 层 | 位置 | 输入 | 输出 | 机制 |
 |----|------|------|------|------|
 | Nginx | `/.well-known/` | `/.well-known/oauth-authorization-server/...` | 同 (不剥前缀) | proxy_pass 无 trailing slash |
-| Nginx | `/api-gateway/` | `/api-gateway/ecso/auth/oauth2/token` | `/ecso/auth/oauth2/token` | proxy_pass trailing slash 剥前缀 |
+| Nginx | `/api-gateway/` | `/api-gateway/auth/oauth2/token` | `/auth/oauth2/token` | proxy_pass trailing slash 剥前缀 |
 | Nginx | `/mcp-gateway/` | `/mcp-gateway/mcp` | `/mcp` | proxy_pass trailing slash 剥前缀 |
 | Gateway | rfc8414 | `/.well-known/oauth-authorization-server/任意` | `/.well-known/openid-configuration` | RewritePath |
-| Gateway | auth-* | `/ecso/auth/oauth2/token` | `/oauth2/token` | StripPrefix=2 |
-| Gateway | vue-login | `/ecso/vue` | `/api-gateway/ecso/vue/` | RewritePath (加前缀+斜杠) |
-| Gateway | vue-assets | `/ecso/vue/assets/xxx` | `/api-gateway/ecso/vue/assets/xxx` | RewritePath (加前缀) |
+| Gateway | auth-* | `/auth/oauth2/token` | `/oauth2/token` | StripPrefix=1 |
+| Gateway | vue-login | `/vue` | `/api-gateway/vue/` | RewritePath (加前缀+斜杠) |
+| Gateway | vue-assets | `/vue/assets/xxx` | `/api-gateway/vue/assets/xxx` | RewritePath (加前缀) |
 
 ### 15.2 响应头重写 (302 Location)
 
 | 场景 | 内部 Location | 公网 Location | 机制 |
 |------|--------------|--------------|------|
-| 授权 → Vue 登录 | `http://localhost:9090/vue-login;...` | `http://localhost:8080/api-gateway/ecso/vue/;...` | RewriteResponseHeader |
-| 授权 → Auth 路径 | `http://localhost:9090/oauth2/authorize?...` | `http://localhost:8080/api-gateway/ecso/auth/oauth2/authorize?...` | RewriteResponseHeader |
-| 登录 → 授权 | `http://localhost:9090/oauth2/authorize?...` | `http://localhost:8080/api-gateway/ecso/auth/oauth2/authorize?...` | RewriteResponseHeader |
+| 授权 → Vue 登录 | `http://localhost:9090/vue-login;...` | `http://localhost:8080/api-gateway/vue/;...` | RewriteResponseHeader |
+| 授权 → Auth 路径 | `http://localhost:9090/oauth2/authorize?...` | `http://localhost:8080/api-gateway/auth/oauth2/authorize?...` | RewriteResponseHeader |
+| 登录 → 授权 | `http://localhost:9090/oauth2/authorize?...` | `http://localhost:8080/api-gateway/auth/oauth2/authorize?...` | RewriteResponseHeader |
 
 ### 15.3 响应体重写 (JSON)
 
 | 场景 | 内部 URL | 公网 URL | 机制 |
 |------|---------|---------|------|
-| AS 元数据 | `http://localhost:9090` | `http://localhost:8080/api-gateway/ecso/auth` | RewriteAuthUrls |
-| RFC 8414 响应 | `http://localhost:9090` | `http://localhost:8080/api-gateway/ecso/auth` | RewriteAuthUrls |
+| AS 元数据 | `http://localhost:9090` | `http://localhost:8080/api-gateway/auth` | RewriteAuthUrls |
+| RFC 8414 响应 | `http://localhost:9090` | `http://localhost:8080/api-gateway/auth` | RewriteAuthUrls |
 
 ### 15.4 MCP 401 头重写
 
@@ -1086,14 +1085,14 @@ Step 12: MCP tools/list 或 tools/call
 ```
 公开路径 (无需认证):
   /.well-known/oauth-authorization-server/**   ← RFC 8414 AS 发现
-  /ecso/auth/.well-known/**                     ← AS 元数据
-  /ecso/auth/oauth2/register                    ← DCR 注册
-  /ecso/auth/oauth2/token                       ← Token 端点
-  /ecso/auth/oauth2/authorize                   ← 授权端点
-  /ecso/auth/oauth2/jwks                        ← JWKS
-  /ecso/auth/login                              ← 登录 POST
-  /ecso/auth/oauth2/auth-info                   ← Auth 信息
-  /ecso/vue/**                                  ← Vue 前端
+  /auth/.well-known/**                     ← AS 元数据
+  /auth/oauth2/register                    ← DCR 注册
+  /auth/oauth2/token                       ← Token 端点
+  /auth/oauth2/authorize                   ← 授权端点
+  /auth/oauth2/jwks                        ← JWKS
+  /auth/login                              ← 登录 POST
+  /auth/oauth2/auth-info                   ← Auth 信息
+  /vue/**                                  ← Vue 前端
 
 需认证路径 (Bearer JWT):
   其他所有路径
@@ -1147,36 +1146,36 @@ Step 12: MCP tools/list 或 tools/call
 ### A.1 用户打开 Vue 登录页
 
 ```
-URL: http://localhost:8080/api-gateway/ecso/vue/
+URL: http://localhost:8080/api-gateway/vue/
 
-[浏览器] GET /api-gateway/ecso/vue/
+[浏览器] GET /api-gateway/vue/
     |
     ▼
 [Nginx] location /api-gateway/ { proxy_pass http://127.0.0.1:8081/; }
-    | 剥 /api-gateway/ → 转发 /ecso/vue/
+    | 剥 /api-gateway/ → 转发 /vue/
     |
     ▼
-[API Gateway] 路由 vue-login: Path=/ecso/vue
-    | RewritePath: /ecso/vue → /api-gateway/ecso/vue/
+[API Gateway] 路由 vue-login: Path=/vue
+    | RewritePath: /vue → /api-gateway/vue/
     |
     ▼
-[Vite :9091] base=/api-gateway/ecso/vue/
+[Vite :9091] base=/api-gateway/vue/
     | 返回 index.html (含 Vue SPA)
     |
     ▼
 [浏览器] 解析 index.html, 请求:
-    GET /api-gateway/ecso/vue/assets/index-DBNAin-e.js
-    GET /api-gateway/ecso/vue/assets/index-D4U55mnN.css
+    GET /api-gateway/vue/assets/index-DBNAin-e.js
+    GET /api-gateway/vue/assets/index-D4U55mnN.css
     |
     ▼
 [Nginx] → [API Gateway vue-assets] → [Vite] → 返回 JS/CSS
     |
     ▼
 [浏览器] Vue SPA 渲染, 执行 App.vue:
-    pathname = /api-gateway/ecso/vue/
-    indexOf('/ecso') = 14
-    gatewayPrefix = /api-gateway/ecso/auth
-    fetch(/api-gateway/ecso/auth/oauth2/auth-info) → 显示登录表单
+    pathname = /api-gateway/vue/
+    indexOf('/auth') = 14
+    gatewayPrefix = /api-gateway/auth
+    fetch(/api-gateway/auth/oauth2/auth-info) → 显示登录表单
 ```
 
 ### A.2 MCP 客户端调用 getWeatherForecast
@@ -1235,13 +1234,13 @@ self = 自己监听    → = 依赖/连接到
 
 ```json
 {
-  "issuer": "http://localhost:8080/api-gateway/ecso/auth",
-  "authorization_endpoint": "http://localhost:8080/api-gateway/ecso/auth/oauth2/authorize",
-  "token_endpoint": "http://localhost:8080/api-gateway/ecso/auth/oauth2/token",
-  "registration_endpoint": "http://localhost:8080/api-gateway/ecso/auth/oauth2/register",
-  "jwks_uri": "http://localhost:8080/api-gateway/ecso/auth/oauth2/jwks",
-  "introspection_endpoint": "http://localhost:8080/api-gateway/ecso/auth/oauth2/introspect",
-  "revocation_endpoint": "http://localhost:8080/api-gateway/ecso/auth/oauth2/revoke",
+  "issuer": "http://localhost:8080/api-gateway/auth",
+  "authorization_endpoint": "http://localhost:8080/api-gateway/auth/oauth2/authorize",
+  "token_endpoint": "http://localhost:8080/api-gateway/auth/oauth2/token",
+  "registration_endpoint": "http://localhost:8080/api-gateway/auth/oauth2/register",
+  "jwks_uri": "http://localhost:8080/api-gateway/auth/oauth2/jwks",
+  "introspection_endpoint": "http://localhost:8080/api-gateway/auth/oauth2/introspect",
+  "revocation_endpoint": "http://localhost:8080/api-gateway/auth/oauth2/revoke",
   "scopes_supported": ["openid", "offline_access", "mcp:read", "mcp:write"],
   "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token"],
   "response_types_supported": ["code"],
@@ -1259,7 +1258,7 @@ self = 自己监听    → = 依赖/连接到
 ```json
 {
   "resource": "http://localhost:8080/mcp-gateway/weather/mcp",
-  "authorization_servers": ["http://localhost:8080/api-gateway/ecso/auth"],
+  "authorization_servers": ["http://localhost:8080/api-gateway/auth"],
   "resource_name": "Spring MCP Gateway",
   "bearer_methods_supported": ["header"],
   "scopes_supported": ["mcp:read", "mcp:write"]
@@ -1304,10 +1303,10 @@ self = 自己监听    → = 依赖/连接到
 ## 19. 管理控制台详解
 
 ### URL
-`http://localhost:8080/api-gateway/ecso/admin/`
+`http://localhost:8080/api-gateway/admin/`
 
 ### 架构
-- **页面**: API Gateway whitelist `/ecso/admin/**` → Vite:9094
+- **页面**: API Gateway whitelist `/admin/**` → Vite:9094
 - **API 调用**: `/mcp-gateway/admin/**` (nginx 直连 8082, 避免 JWT 过滤)
 - **登录**: sys_user username/password → admin token (bcrypt)
 
@@ -1340,7 +1339,7 @@ const expectedIssuer = typeof authorizationServerUrl === "string" ? authorizatio
 if (!(parsed.issuer === expectedIssuer || ...)) throw new IssuerMismatchError(...);
 ```
 
-当 AS 的 issuer 带路径 (`http://localhost:8080/api-gateway/ecso/auth`) 时，
+当 AS 的 issuer 带路径 (`http://localhost:8080/api-gateway/auth`) 时，
 SDK 用 `new URL(authorizationServers[0]).origin` (`http://localhost:8080`) 作 expectedIssuer，导致不匹配。
 
 ### 修复 (Patch SDK, 不改 Gateway)
@@ -1386,7 +1385,7 @@ null
 | v0.3.0 | 两层客户端模型 | DCR 客户端禁止 client_credentials |
 | v0.7.0 | H1: DCR denyAll → 403 JSON | 不泄露 localhost:9090 |
 | v0.7.0 | H2: auth-info 脱敏 | 不返回 clientId/redirectUri |
-| v0.7.0 | M1: Cookie 安全 | SameSite=Lax + Path=/api-gateway/ecso/auth |
+| v0.7.0 | M1: Cookie 安全 | SameSite=Lax + Path=/api-gateway/auth |
 | v0.7.0 | M2: CORS 限制 | localhost/127.0.0.1/null |
 | v0.7.0 | M3: server_tokens off | nginx 版本不泄露 |
 | v0.7.0 | M4: root / → 404 | 不泄露架构信息 |
