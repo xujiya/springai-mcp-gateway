@@ -88,25 +88,24 @@ public class SecurityConfiguration {
     /**
      * BearerTokenResolver that skips non-JWT Bearer tokens.
      * <p>
-     * API Keys ("ak-*") and admin tokens are handled by ApiKeyAuthenticationFilter
-     * or the controller itself. If we let the JWT filter try to decode these,
-     * it will fail with "Malformed token" and return 401.
+     * API Keys ("ak-*:sk-*") and admin tokens ("adm-*") are handled by
+     * ApiKeyAuthenticationFilter or the controller itself. If we let the JWT
+     * filter try to decode these, it will fail with "Malformed token" and return 401.
      * <p>
      * This resolver returns null for non-JWT Bearer tokens, causing the JWT
-     * filter to skip authentication — the request then falls through to the
-     * ApiKeyAuthenticationFilter or the controller's own auth check.
+     * filter to skip authentication.
      */
     private BearerTokenResolver apiKeyAwareBearerTokenResolver() {
         return (HttpServletRequest request) -> {
             String header = request.getHeader("Authorization");
             if (header != null && header.startsWith("Bearer ")) {
                 String token = header.substring(7).trim();
-                // Skip API keys (ak-*) — handled by ApiKeyAuthenticationFilter
-                if (token.startsWith("ak-")) {
+                // Skip API keys (ak-*:sk-* format) — handled by ApiKeyAuthenticationFilter
+                if (token.startsWith("ak-") && token.contains(":sk-")) {
                     return null;
                 }
-                // Skip admin tokens — handled by controller
-                if (token.equals(adminToken)) {
+                // Skip admin tokens (adm-* format) — handled by controller
+                if (token.startsWith("adm-")) {
                     return null;
                 }
                 // JWT token — let the JWT filter process it
@@ -115,9 +114,6 @@ public class SecurityConfiguration {
             return null;
         };
     }
-
-    @Value("${ecso.mcp.api-key.admin-token:mcp-admin-2025}")
-    private String adminToken;
 
     private CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();

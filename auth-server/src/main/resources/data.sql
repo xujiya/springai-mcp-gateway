@@ -63,19 +63,22 @@ INSERT IGNORE INTO oauth2_registered_client (
     '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
 );
 
--- Default API Key for AK static credential mode (对标阿里云 AccessKey)
--- Key: ak-mcp-dev-20250613 (plaintext, shown once at creation)
--- Hash: {bcrypt}$2a$10$9NxZWHqfcuSAVisfsX.PVOQ03KRmjY7zkcXrtdHrYywK6RuWOPS7u
+-- Default API Key — dual-part AccessKey model (对标阿里云 AccessKey)
+-- AccessKey ID: ak-36f8ea0fc5ad9937572d (public, for request lookup)
+-- AccessKey Secret: sk-8665c9bbdd338e3ce03a0fdf115fbf65685b2b94 (NEVER transmitted, only for HMAC signing)
+-- ⚠️  In Bearer mode, format is: ak-36f8ea0fc5ad9937572d:sk-8665c9bbdd338e3ce03a0fdf115fbf65685b2b94
+-- Hash: {bcrypt}$2a$10$UIKzscdqwqZ3geT.JWZ4IOLvjca7lkGfHzkfyZQ.t0f4Z2wHk4CR2
 -- Service scope: * (all services)
--- Expires: NULL = never expires (AK mode)
-INSERT IGNORE INTO mcp_api_key (id, name, api_key_hash, api_key_prefix, service_scope, description, created_by, expires_at, enabled)
+-- Expires: NULL = never expires (AK mode, 对标阿里云)
+INSERT IGNORE INTO mcp_api_key (id, name, access_key_id, access_key_secret_hash, access_key_prefix, service_scope, description, created_by, expires_at, enabled)
 VALUES (
     '1',
     'default-dev-key',
-    '{bcrypt}$2a$10$9NxZWHqfcuSAVisfsX.PVOQ03KRmjY7zkcXrtdHrYywK6RuWOPS7u',
-    'ak-mcp-dev',
+    'ak-36f8ea0fc5ad9937572d',
+    '{bcrypt}$2a$10$UIKzscdqwqZ3geT.JWZ4IOLvjca7lkGfHzkfyZQ.t0f4Z2wHk4CR2',
+    'ak-36f8ea0f',
     '*',
-    'Default development API key (AK mode, never expires)',
+    'Default dev API key (AK mode, never expires, 160-bit secret)',
     'system',
     NULL,
     1

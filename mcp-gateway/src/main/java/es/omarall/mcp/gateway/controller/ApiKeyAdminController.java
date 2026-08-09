@@ -1,7 +1,6 @@
 package es.omarall.mcp.gateway.controller;
 
 import java.time.Instant;
-import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -12,6 +11,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,25 +28,20 @@ import es.omarall.mcp.gateway.service.ApiKeyService;
 /**
  * Admin API for API Key CRUD.
  * <p>
- * Protected by a configurable admin Bearer token ({@code ecso.mcp.api-key.admin-token}).
- * This is a simple auth mechanism suitable for internal admin access,
- * similar to Kubernetes service account tokens.
+ * Protected by a configurable admin Bearer token.
+ * The admin token is stored as bcrypt hash in config for timing-attack resistance.
  * <p>
  * Usage:
  * <pre>
- * # Create a new API key
+ * # Create a new API key (returns AccessKey ID + Secret — save the Secret!)
  * curl -X POST http://localhost:8082/admin/api-keys \
- *   -H "Authorization: Bearer mcp-admin-2025" \
+ *   -H "Authorization: Bearer adm-your-admin-token" \
  *   -H "Content-Type: application/json" \
- *   -d '{"name": "ci-cd-key", "serviceScope": "weather", "description": "CI/CD pipeline"}'
+ *   -d '{"name": "ci-cd-key", "serviceScope": "weather"}'
  *
- * # List all API keys
+ * # List all API keys (never shows secret)
  * curl http://localhost:8082/admin/api-keys \
- *   -H "Authorization: Bearer mcp-admin-2025"
- *
- * # Revoke an API key
- * curl -X PUT http://localhost:8082/admin/api-keys/{id}/revoke \
- *   -H "Authorization: Bearer mcp-admin-2025"
+ *   -H "Authorization: Bearer adm-your-admin-token"
  * </pre>
  */
 @Slf4j
@@ -55,13 +50,29 @@ import es.omarall.mcp.gateway.service.ApiKeyService;
 public class ApiKeyAdminController {
 
     private final ApiKeyService apiKeyService;
-    private final String adminToken;
+    private final PasswordEncoder passwordEncoder;
+    private final String adminTokenHash;
 
     public ApiKeyAdminController(
             ApiKeyService apiKeyService,
-            @Value("${ecso.mcp.api-key.admin-token:mcp-admin-2025}") String adminToken) {
+            PasswordEncoder passwordEncoder,
+            @Value("${ecso.mcp.api-key.admin-token-hash:}") String adminTokenHash,
+            @Value("${ecso.mcp.api-key.admin-token:}") String adminTokenPlaintext) {
         this.apiKeyService = apiKeyService;
-        this.adminToken = adminToken;
+        this.passwordEncoder = passwordEncoder;
+
+        // Support both: plaintext (for dev) and bcrypt hash (for production)
+        if (!adminTokenHash.isBlank()) {
+            this.adminTokenHash = adminTokenHash;
+        } else if (!adminTokenPlaintext.isBlank()) {
+            // Dev mode: hash the plaintext token at startup
+            this.adminTokenHash = passwordEncoder.encode(adminTokenPlaintext);
+            log.warn("⚠️  Admin token configured as plaintext (dev only). " +
+                     "Use ecso.mcp.api-key.admin-token-hash for production.");
+        } else {
+            this.adminTokenHash = "";
+            log.error("❌ No admin token configured! Admin API will be inaccessible.");
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -84,23 +95,25 @@ public class ApiKeyAdminController {
                 expiresAt = Instant.parse(req.expiresAt());
             } catch (Exception e) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("error", "invalid_expires_at", "hint", "Use ISO-8601 format, e.g. 2026-01-01T00:00:00Z"));
+                        .body(Map.of("error", "invalid_expires_at",
+                                "hint", "Use ISO-8601 format, e.g. 2026-01-01T00:00:00Z"));
             }
         }
 
-        String rawKey = apiKeyService.create(
+        ApiKeyService.CreateResult result = apiKeyService.create(
                 req.name(),
                 req.serviceScope(),
                 req.description(),
                 req.createdBy(),
                 expiresAt);
 
-        log.info("Admin created API key: name={}, scope={}", req.name(), req.serviceScope());
+        log.info("Admin created API key: name={}, accessKeyId={}, scope={}",
+                req.name(), result.accessKeyId(), req.serviceScope());
 
-        // Return the plaintext key — this is the ONLY time it's shown!
         Map<String, Object> response = new HashMap<>();
-        response.put("message", "API key created. Save the key — it will NOT be shown again!");
-        response.put("apiKey", rawKey);
+        response.put("message", "API key created. Save the AccessKey Secret — it will NOT be shown again!");
+        response.put("accessKeyId", result.accessKeyId());
+        response.put("accessKeySecret", result.accessKeySecret());
         response.put("name", req.name());
         response.put("serviceScope", req.serviceScope() != null ? req.serviceScope() : "*");
         response.put("expiresAt", expiresAt != null ? expiresAt.toString() : "never");
@@ -125,7 +138,8 @@ public class ApiKeyAdminController {
             Map<String, Object> map = new HashMap<>();
             map.put("id", k.getId());
             map.put("name", k.getName());
-            map.put("apiKeyPrefix", k.getApiKeyPrefix());
+            map.put("accessKeyId", k.getAccessKeyId());
+            map.put("accessKeyPrefix", k.getAccessKeyPrefix());
             map.put("serviceScope", k.getServiceScope());
             map.put("description", k.getDescription());
             map.put("createdBy", k.getCreatedBy());
@@ -200,15 +214,23 @@ public class ApiKeyAdminController {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Auth Helper
+    // Auth Helper — bcrypt comparison (timing-safe)
     // ─────────────────────────────────────────────────────────────
 
+    /**
+     * Authenticate admin using bcrypt token comparison.
+     * Timing-safe: bcrypt.matches() runs in constant time relative to hash length.
+     */
     private boolean authenticateAdmin(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return false;
         }
+        if (adminTokenHash.isBlank()) {
+            log.error("No admin token hash configured — rejecting all admin requests");
+            return false;
+        }
         String token = authHeader.substring(7);
-        return adminToken.equals(token);
+        return passwordEncoder.matches(token, adminTokenHash);
     }
 
     // ─────────────────────────────────────────────────────────────

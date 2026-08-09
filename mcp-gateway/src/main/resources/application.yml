@@ -107,8 +107,9 @@ ecso:
         url: http://localhost:9093/mcp
     api-key:
       enabled: true
-      header-name: X-API-Key          # Header name for API Key (also accepts Authorization: Bearer ak-*)
-      admin-token: mcp-admin-2025     # Bearer token for admin CRUD API
+      header-name: X-API-Key          # Header name for API Key (format: ak-xxx:sk-yyy)
+      admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7  # Admin Bearer token for CRUD API (dev mode)
+      # admin-token-hash: {bcrypt}$2a$10$...  # Production: use bcrypt hash instead of plaintext
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
