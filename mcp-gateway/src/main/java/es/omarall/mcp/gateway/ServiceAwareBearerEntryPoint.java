@@ -40,6 +40,17 @@ public class ServiceAwareBearerEntryPoint implements AuthenticationEntryPoint {
     private String resolvePrmUrl(HttpServletRequest request) {
         String path = request.getRequestURI();
 
+        // Build base URL from request's actual host — RFC 9728 requires exact match
+        // e.g. client connecting as 127.0.0.1 must get PRM with 127.0.0.1, not localhost
+        String scheme = request.getScheme();
+        String serverName = request.getServerName();
+        int serverPort = request.getServerPort();
+        String baseUrl = scheme + "://" + serverName;
+        if (!((scheme.equals("http") && serverPort == 80) || (scheme.equals("https") && serverPort == 443))) {
+            baseUrl += ":" + serverPort;
+        }
+        String contextPath = request.getContextPath();
+
         // Match /{serviceName}/mcp → /{serviceName}/.well-known/oauth-protected-resource
         // e.g. /weather/mcp → /weather/.well-known/oauth-protected-resource
         if (path != null) {
@@ -49,11 +60,11 @@ public class ServiceAwareBearerEntryPoint implements AuthenticationEntryPoint {
             java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^(/([^/]+))/mcp").matcher(servletPath);
             if (matcher.find()) {
                 String servicePrefix = matcher.group(1); // e.g. /weather
-                return mcpServerPublicUrl + servicePrefix + "/.well-known/oauth-protected-resource";
+                return baseUrl + contextPath + servicePrefix + "/.well-known/oauth-protected-resource";
             }
         }
 
         // Default: unified gateway PRM
-        return mcpServerPublicUrl + "/.well-known/oauth-protected-resource/mcp";
+        return baseUrl + contextPath + "/.well-known/oauth-protected-resource/mcp";
     }
 }

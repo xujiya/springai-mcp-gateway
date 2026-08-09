@@ -176,19 +176,52 @@ public class McpServiceRouterController {
     // ─────────────────────────────────────────────────────────────
 
     @GetMapping("/{serviceName}/.well-known/oauth-protected-resource")
-    public Map<String, Object> protectedResourceMetadata(@PathVariable String serviceName) {
+    public Map<String, Object> protectedResourceMetadata(
+            @PathVariable String serviceName,
+            jakarta.servlet.http.HttpServletRequest request) {
         if (!serviceUrls.containsKey(serviceName)) {
             throw new IllegalArgumentException("Unknown MCP service: " + serviceName);
         }
 
-        String resourceUrl = mcpServerPublicUrl + "/" + serviceName + "/mcp";
+        // Use request's actual host to build resource URL — RFC 9728 requires exact match
+        // e.g. client connecting as 127.0.0.1 must get resource=...127.0.0.1...
+        String scheme = request.getScheme();
+        String serverName = request.getServerName();
+        int serverPort = request.getServerPort();
+        String baseUrl = scheme + "://" + serverName;
+        if (!((scheme.equals("http") && serverPort == 80) || (scheme.equals("https") && serverPort == 443))) {
+            baseUrl += ":" + serverPort;
+        }
+        String contextPath = request.getContextPath(); // e.g. /mcp-gateway when behind gateway
+        String resourceUrl = baseUrl + contextPath + "/" + serviceName + "/mcp";
+
+        // Build auth server URL from request host (same origin as mcp-gateway through nginx)
+        String authUrl = resolveAuthServerUrl(baseUrl);
+
         Map<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("resource", resourceUrl);
-        metadata.put("authorization_servers", List.of(authServerPublicUrl));
+        metadata.put("authorization_servers", List.of(authUrl));
         metadata.put("scopes_supported", List.of("mcp:read", "mcp:write"));
         metadata.put("bearer_methods_supported", List.of("header"));
         metadata.put("resource_name", serviceName + " MCP Service");
         return metadata;
+    }
+
+    /**
+     * Resolve auth server public URL from the request's base URL.
+     * Replaces the mcp-gateway path prefix with the auth-server path prefix.
+     * e.g. http://127.0.0.1:8080 → http://127.0.0.1:8080/api-gateway/ecso/auth
+     */
+    private String resolveAuthServerUrl(String requestBaseUrl) {
+        // Extract the base from the configured authServerPublicUrl (path part)
+        // e.g. http://localhost:8080/api-gateway/ecso/auth → /api-gateway/ecso/auth
+        try {
+            java.net.URI uri = new java.net.URI(authServerPublicUrl);
+            String authPath = uri.getPath();
+            return requestBaseUrl + authPath;
+        } catch (java.net.URISyntaxException e) {
+            return authServerPublicUrl; // fallback to configured value
+        }
     }
 
     // ─────────────────────────────────────────────────────────────
