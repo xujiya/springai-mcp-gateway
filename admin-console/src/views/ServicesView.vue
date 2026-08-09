@@ -65,7 +65,7 @@ import { ref, onMounted } from 'vue'
 import { checkMcpService, getProtectedResourceMetadata } from '../api/admin.js'
 import axios from 'axios'
 
-const MCP_GW = '/api-gateway/ecso/mcp-gateway'
+const MCP_GW = '/mcp-gateway'
 
 export default {
   name: 'ServicesView',
