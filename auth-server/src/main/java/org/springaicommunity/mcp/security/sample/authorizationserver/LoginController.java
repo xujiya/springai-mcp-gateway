@@ -1,5 +1,6 @@
 package org.springaicommunity.mcp.security.sample.authorizationserver;
 
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Controller;
@@ -9,7 +10,7 @@ import org.springframework.web.bind.annotation.ResponseBody;
 @Controller
 class LoginController {
 
-    @GetMapping("/vue-login")
+    @GetMapping(value = "/vue-login", produces = MediaType.TEXT_HTML_VALUE)
     @ResponseBody
     public String vueLogin() {
         return "<!DOCTYPE html>\n" +
