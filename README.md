@@ -1,10 +1,10 @@
 # MCP Gateway — 完整安全参考项目
 
-> 封板版本: **v0.13.1** | 最后更新: 2026-08-10
+> 封板版本: **v0.14.0** | 最后更新: 2026-08-10
 
 端到端实现 **MCP (Model Context Protocol) 网关安全架构**的参考项目，包含：
 
-- **Nginx** (8080) → **API Gateway** (8081) → Auth Server / Vue / Admin Console
+- **HAProxy** (8080) → **API Gateway** (8081) → Auth Server / Vue / Admin Console
 - **MCP Gateway** (8082) → Weather Server / Climate Server（纯透明代理）
 - **OAuth2 + DCR + PKCE** 完整 RFC 9728 流程
 - **双模认证**: JWT Bearer + API Key (AccessKey 双部件模型, 对标阿里云)
@@ -27,7 +27,7 @@ springai-mcp-gateway/
 ├── climate-server/       # 气候MCP工具后端 :9093
 ├── login-ui-server/      # Vue 登录前端 (Vite :9091)
 ├── admin-console/        # Vue3 管理控制台 (Vite :9094)
-├── nginx.conf            # Nginx :8080 (不改!)
+├── haproxy.cfg          # HAProxy :8080 (不改!)
 └── mcp-bearer-proxy.mjs  # 调试用 Bearer Token 代理 :9099
 ```
 
@@ -35,7 +35,7 @@ springai-mcp-gateway/
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| **Nginx** | 8080 | 统一外部入口, server_tokens off |
+| **HAProxy** | 8080 | 统一外部入口, del-header Server |
 | **API Gateway** | 8081 | 前端透传 + Auth 路由 + URL 重写 |
 | **MCP Gateway** | 8082 | 纯透明代理 + JWT + API Key + Admin API |
 | **Auth Server** | 9090 | Spring Authorization Server + DCR |
@@ -79,8 +79,8 @@ cd login-ui-server && npm run dev &
 # Admin 控制台
 cd admin-console && npm run dev &
 
-# Nginx
-nginx
+# HAProxy
+haproxy
 ```
 
 ### 4. 验证
@@ -101,7 +101,7 @@ open http://localhost:8080/api-gateway/admin/
 ### 流量链路
 
 ```
-浏览器/pi MCP ──→ Nginx(:8080) ──→ API Gateway(:8081) ──→ Auth Server(:9090)
+浏览器/pi MCP ──→ HAProxy(:8080) ──→ API Gateway(:8081) ──→ Auth Server(:9090)
                                     └→ Vite(:9091/:9094)
                  ──→ MCP Gateway(:8082) ──→ Weather(:9092)
                                     └→ Climate(:9093)
@@ -183,9 +183,9 @@ api-key:
   # admin-token-hash: {bcrypt}$2a$10$...                 # production
 ```
 
-### Nginx — **不要修改!**
+### HAProxy — **不要修改!**
 
-所有 URL 重写在 API Gateway 层完成，Nginx 只做 `proxy_pass`。
+所有 URL 重写在 API Gateway 层完成，HAProxy 只做 backend 路由 + regsub 路径重写。
 
 ## 文档
 
@@ -215,17 +215,18 @@ api-key:
 | v0.12.0 | Admin 控制台 Vue3 SPA |
 | v0.13.0 | Admin v2 (仪表盘 + 客户端详情 + 系统状态) |
 | **v0.13.1** | **MCP SDK RFC 9728 issuer patch** |
+| **v0.14.0** | **HAProxy 替换 nginx (haproxy 2.8.26 Cygwin)** |
 
 ## 生产部署检查清单
 
-- [ ] TLS (HTTPS) on nginx
+- [ ] TLS (HTTPS) on HAProxy
 - [ ] Bind 内部端口到 127.0.0.1 + 防火墙
 - [ ] DCR 关闭 (`mcp.dcr.enabled: false`)
 - [ ] 修改默认 admin 密码
 - [ ] bcrypt `admin-token-hash` (不用 plaintext admin-token)
 - [ ] `cookie.secure: true`
 - [ ] CORS 限制到生产域名
-- [ ] nginx `limit_req_zone` for `/oauth2/token`
+- [ ] HAProxy rate limiting for `/oauth2/token`
 - [ ] AES-GCM 加密 secret 存储 (HMAC 签名验证)
 - [ ] 重新应用 MCP SDK issuer patch (如 SDK 升级)
 

@@ -15,7 +15,7 @@
 ## 架构
 
 - **页面**: 通过 API Gateway whitelist 路由 (`/admin/**` → Vite:9094)
-- **API 调用**: 通过 `/mcp-gateway/` (nginx 直连 8082, 避免 JWT 过滤)
+- **API 调用**: 通过 `/mcp-gateway/` (HAProxy 直连 8082, 避免 JWT 过滤)
 - **登录**: sys_user 表的 username/password → admin token
 
 ## 技术栈

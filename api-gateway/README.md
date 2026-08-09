@@ -10,7 +10,7 @@
 - CORS 处理
 - RFC 8414 AS 发现路由
 
-**核心原则**: 所有 URL 重写在本层完成，Nginx 只做 `proxy_pass`。
+**核心原则**: 所有 URL 重写在本层完成，HAProxy 只做 backend 路由 + regsub 路径重写。
 
 ## 路由表
 

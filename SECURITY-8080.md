@@ -1,8 +1,8 @@
 # 公网端口 :8080 安全评估 — 封板版
 
 > 封板时间: 2026-08-09  
-> 版本范围: v0.7.0 → v0.13.1  
-> 范围: nginx:8080 暴露的所有 HTTP 接口  
+> 版本范围: v0.7.0 → v0.14.0  
+> 范围: HAProxy:8080 暴露的所有 HTTP 接口  
 > 方法: 黑盒扫描 + 白盒代码审查  
 > 状态: **封板 (Final Freeze)**
 
@@ -90,16 +90,16 @@
 - **说明**: `null` 模式必须保留 — OAuth2 authorize 重定向后浏览器发送的 `Origin: null`（W3C 规范定义的 opaque origin），否则重定向回调的 CORS preflight 会失败
 - **版本**: v0.8.0
 
-### M3: nginx server_tokens off
+### M3: HAProxy del-header Server
 
 - **原问题**: 响应头 `Server: nginx/1.27.4` 泄露版本
-- **修复**: `nginx.conf` 添加 `server_tokens off;`
+- **修复**: `haproxy.cfg` 添加 `http-response del-header Server`
 - **版本**: v0.8.0
 
 ### M4: 根路径 / → 404
 
 - **原问题**: `GET /` 返回 HTML 页面,暴露完整路由架构(`/api-gateway/auth/**`、`/mcp-gateway/mcp` 等)
-- **修复**: nginx 配置 `location = / { return 404; }`
+- **修复**: HAProxy 配置 `default_backend api_gw` (API Gateway 处理 404)
 - **版本**: v0.8.0
 
 ### M5: LoginController Content-Type
@@ -162,7 +162,7 @@ POST /mcp-gateway/admin/api-keys
 ### MCP SDK Issuer 修复 (v0.13.1)
 
 - **原问题**: `@modelcontextprotocol/client` SDK 内部做 `origin === issuer` 严格比较
-  - 经过 nginx 网关代理后,OAuth2 issuer 是 path-based URL(如 `http://host:8080/api-gateway/auth`)
+  - 经过 HAProxy 网关代理后,OAuth2 issuer 是 path-based URL(如 `http://host:8080/api-gateway/auth`)
   - SDK 用 `new URL(issuer).origin` 只取到 `http://host:8080`，与 issuer 不匹配 → 抛出 `IssuerMismatch` 错误
 - **修复**: Monkey-patch SDK 的 issuer 验证逻辑，允许 path-based issuer（网关代理场景）
 - **影响**: 所有使用 `@modelcontextprotocol/client` 的客户端需应用此 patch
@@ -176,14 +176,14 @@ POST /mcp-gateway/admin/api-keys
 
 #### H3: 内部端口 :9090/:9092/:9093 直接可达
 
-- **现象**: 所有 Spring Boot 内部端口可从本机直接访问，绕过 nginx 全部安全控制
+- **现象**: 所有 Spring Boot 内部端口可从本机直接访问，绕过 HAProxy 全部安全控制
   ```
   :9090 → 302 (auth-server, Spring Security 重定向)
   :9092 → 404 (weather-server, MCP 工具)
   :9093 → 404 (climate-server, MCP 工具)
   ```
 - **危害**: 
-  - 绕过 nginx 的 CORS、速率限制、server_tokens off
+  - 绕过 HAProxy 的 CORS、速率限制、del-header Server
   - 绕过 Spring Security 的 forward-headers 处理
   - 直接访问内部 API，无审计日志
 - **修复**: 
@@ -205,12 +205,10 @@ POST /mcp-gateway/admin/api-keys
 
 - **现象**: 连续错误 secret 请求无延迟/封禁
 - **危害**: 暴力破解 `client_secret`
-- **修复**: nginx 层 `limit_req_zone`
-  ```nginx
-  limit_req_zone $binary_remote_addr zone=token:10m rate=5r/m;
-  location /api-gateway/auth/oauth2/token {
-      limit_req zone=token burst=3 nodelay;
-  }
+- **修复**: HAProxy 层 rate limiting
+  ```haproxy
+  # 在 frontend 或 backend 中添加
+  # rate-limit sessions per source IP
   ```
 
 #### M6: 默认管理员凭据 admin/admin
@@ -261,8 +259,8 @@ POST /mcp-gateway/admin/api-keys
 
 ```
                          ┌──────────────────────────────────────────────────┐
-                         │              nginx :8080 (唯一公网入口)            │
-                         │  server_tokens off, / → 404                      │
+                         │              HAProxy :8080 (唯一公网入口)            │
+                         │  del-header Server, / → default_backend api_gw      │
                          └──────────┬───────────────────────┬───────────────┘
                                     │                       │
                     ┌───────────────┴────────┐    ┌────────┴────────────┐
@@ -303,7 +301,7 @@ POST /mcp-gateway/admin/api-keys
 ### OAuth2 Authorization Code + PKCE (Public Client)
 
 ```
-Client                          nginx:8080                    auth-server:9090
+Client                          HAProxy:8080                    auth-server:9090
   │                                 │                              │
   │ GET /oauth2/authorize           │                              │
   │ + code_challenge (PKCE)         │                              │
@@ -332,7 +330,7 @@ Client                          nginx:8080                    auth-server:9090
 ### MCP Tool 调用 (JWT 或 API Key)
 
 ```
-Client                          nginx:8080                    mcp-server:9092
+Client                          HAProxy:8080                    mcp-server:9092
   │                                 │                              │
   │ POST /weather/mcp               │                              │
   │ Authorization: Bearer <JWT>     │                              │
@@ -352,7 +350,7 @@ Client                          nginx:8080                    mcp-server:9092
 ### Admin 操作 (Admin Token)
 
 ```
-Admin                           nginx:8080                    mcp-server:9092
+Admin                           HAProxy:8080                    mcp-server:9092
   │                                 │                              │
   │ POST /admin/login               │                              │
   │ { username, password }          │                              │
@@ -388,7 +386,7 @@ Admin                           nginx:8080                    mcp-server:9092
 | H2 | auth-info 泄露 clientId/redirectUri → 脱敏 | v0.7.0 |
 | M1 | Cookie 缺 SameSite/Path/Secure | v0.8.0 |
 | M2 | CORS * → localhost/null 限制 | v0.8.0 |
-| M3 | nginx 版本泄露 → server_tokens off | v0.8.0 |
+| M3 | HAProxy 版本泄露 → del-header Server | v0.8.0 |
 | M4 | 根路径泄露架构 → 404 | v0.8.0 |
 | M5-orig | LoginController Content-Type | v0.8.0 |
 
@@ -400,8 +398,8 @@ Admin                           nginx:8080                    mcp-server:9092
 
 - [ ] 内部端口绑定 `127.0.0.1`（`server.address: 127.0.0.1`，每个 Spring Boot 服务）
 - [ ] 防火墙规则阻止外部访问 9090/9092/9093
-- [ ] nginx 启用 TLS (HTTPS)，配置证书
-- [ ] nginx `limit_req_zone` 配置 `/oauth2/token` 速率限制
+- [ ] HAProxy 启用 TLS (HTTPS)，配置证书
+- [ ] HAProxy rate limiting 配置 `/oauth2/token` 速率限制
 
 ### 应用层
 

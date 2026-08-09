@@ -1,6 +1,6 @@
 # MCP Gateway 系统 — 完整架构文档
 
-> 最后更新: 2026-08-10 (封板 v0.13.1)
+> 最后更新: 2026-08-10 (封板 v0.14.0)
 > 项目根目录: `D:/AI Coding/mcp-gateways/springai-mcp-gateway/`
 
 ---
@@ -11,7 +11,7 @@
 2. [服务清单与端口](#2-服务清单与端口)
 3. [架构图](#3-架构图)
 4. [流量转发全链路](#4-流量转发全链路)
-5. [Nginx 层详解](#5-nginx-层详解)
+5. [HAProxy 层详解](#5-haproxy-层详解)
 6. [API Gateway 层详解](#6-api-gateway-层详解)
 7. [MCP Gateway 层详解](#7-mcp-gateway-层详解)
 8. [Auth Server 层详解](#8-auth-server-层详解)
@@ -38,17 +38,17 @@
 
 本系统实现了一个 **完整的 MCP (Model Context Protocol) 网关安全架构**，包含：
 
-- **Vue 前端** 通过 Nginx → API Gateway → Vite Dev Server 透传路由暴露
-- **OAuth2 Authorization Server** 通过 Nginx → API Gateway → Auth Server 暴露
-- **MCP Gateway** 通过 Nginx → MCP Gateway 暴露，受 OAuth2 保护
+- **Vue 前端** 通过 HAProxy → API Gateway → Vite Dev Server 透传路由暴露
+- **OAuth2 Authorization Server** 通过 HAProxy → API Gateway → Auth Server 暴露
+- **MCP Gateway** 通过 HAProxy → MCP Gateway 暴露，受 OAuth2 保护
 - **DCR (Dynamic Client Registration)** 支持 MCP 客户端自动注册
 - **RFC 8414** Authorization Server 发现机制
 - **RFC 9728** OAuth2 for MCP 标准保护资源元数据
 
 **核心设计原则**：
 
-> 所有 URL 重写在 **API Gateway 层**完成。Nginx 只做简单 `proxy_pass`，不做 `rewrite`、不做 `proxy_redirect`。  
-> 所有外部接口统一经过 Nginx (:8080) 入口，内部微服务间通信使用内部端口。
+> 所有 URL 重写在 **API Gateway 层**完成。HAProxy 只做简单 backend 路由，不做 `rewrite`。
+> 所有外部接口统一经过 HAProxy (:8080) 入口，内部微服务间通信使用内部端口。
 
 ---
 
@@ -56,7 +56,7 @@
 
 | 服务 | 端口 | 协议 | 说明 |
 |------|------|------|------|
-| **Nginx** | 8080 | HTTP | 统一外部入口，反向代理，server_tokens off |
+| **HAProxy** | 8080 | HTTP | 统一外部入口，反向代理，del-header Server |
 | **API Gateway** | 8081 | HTTP (WebFlux) | 前端透传 + Auth 路由 + URL 重写 |
 | **MCP Gateway** | 8082 | HTTP (Servlet) | 纯透明代理 + JWT验证 + API Key认证 + Admin API |
 | **Auth Server** | 9090 | HTTP (Servlet) | Spring Authorization Server + DCR + MySQL |
@@ -69,10 +69,10 @@
 **内部通信关系**：
 
 ```
-Nginx(8080) ──proxy_pass──→ API Gateway(8081) ──proxy──→ Auth Server(9090)
+HAProxy(8080) ──backend──→ API Gateway(8081) ──proxy──→ Auth Server(9090)
                                          └──proxy──→ Vite Dev(9091)
                                          └──proxy──→ Vite Admin(9094)
-Nginx(8080) ──proxy_pass──→ MCP Gateway(8082) ──HTTP──→ Weather Server(9092)
+HAProxy(8080) ──backend──→ MCP Gateway(8082) ──HTTP──→ Weather Server(9092)
                                                      └──HTTP──→ Climate Server(9093)
 API Gateway(8081) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
@@ -95,15 +95,17 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
         │              │                     │
         ▼              ▼                     ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     Nginx (:8080)                                   │
+│                     HAProxy (:8080)                                   │
 │                                                                     │
-│  location /.well-known/  ──→ proxy_pass 8081 (不剥前缀)              │
-│  location /api-gateway/  ──→ proxy_pass 8081/ (剥 /api-gateway/)     │
-│  location /mcp-gateway/  ──→ proxy_pass 8082/ (剥 /mcp-gateway/)     │
-│  location /              ──→ 404 (无信息泄露)                      │
+│  acl is_mcp_gateway path_beg /mcp-gateway/                           │
+│  use_backend mcp_gw if is_mcp_gateway                               │
+│  default_backend api_gw                                             │
 │                                                                     │
-│  ✗ 无 rewrite  ✗ 无 proxy_redirect  ✓ 仅 proxy_pass               │
-│  ✓ server_tokens off  ✓ 每个location完整proxy_set_header             │
+│  api_gw:  /api-gateway/ → :8081 (regsub 剥 /api-gateway/)             │
+│  mcp_gw:  /mcp-gateway/ → :8082 (regsub 剥 /mcp-gateway/)             │
+│                                                                     │
+│  ✗ 无 rewrite  ✓ 仅 backend 路由 + regsub 路径重写                   │
+│  ✓ del-header Server  ✓ 每 backend 完整 http-request set-header      │
 └───────┬──────────────────────┬──────────────────────────────────────┘
         │                      │
         ▼                      ▼
@@ -181,7 +183,7 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    公网 (Nginx :8080)                    │
+│                    公网 (HAProxy :8080)                    │
 │                                                         │
 │  /api-gateway/vue/**      → 公开 (Vue 前端)        │
 │  /api-gateway/auth/**    → 部分公开 (白名单)       │
@@ -214,9 +216,8 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
   │ GET /api-gateway/vue/assets/index-xxx.css
   │
   ▼
-Nginx (:8080)
-  │  location /api-gateway/ { proxy_pass http://127.0.0.1:8081/; }
-  │  ⚠️ trailing slash 剥掉 /api-gateway/ 前缀
+HAProxy (:8080)
+  │  backend api_gw: /api-gateway/ → :8081 (regsub 剥 /api-gateway/ 前缀)
   │
   │ 转发路径: /vue/  (无 /api-gateway/ 前缀)
   │
@@ -238,7 +239,7 @@ Vite Dev Server (:9091)
 浏览器渲染 Vue SPA
 ```
 
-**关键点**：Nginx 剥 `/api-gateway/`，API Gateway 加回 `/api-gateway/`，因为 Vite 的 `base` 配置包含此前缀，资源 URL 都以 `/api-gateway/vue/` 开头。
+**关键点**：HAProxy 剥 `/api-gateway/`，API Gateway 加回 `/api-gateway/`，因为 Vite 的 `base` 配置包含此前缀，资源 URL 都以 `/api-gateway/vue/` 开头。
 
 ### 4.2 Auth 请求
 
@@ -252,9 +253,8 @@ Vite Dev Server (:9091)
   │ POST /api-gateway/auth/login
   │
   ▼
-Nginx (:8080)
-  │  location /api-gateway/ { proxy_pass http://127.0.0.1:8081/; }
-  │  ⚠️ 剥掉 /api-gateway/ 前缀
+HAProxy (:8080)
+  │  backend api_gw: /api-gateway/ → :8081 (regsub 剥前缀)
   │
   │ 转发路径: /auth/oauth2/authorize  (无 /api-gateway/ 前缀)
   │
@@ -290,9 +290,8 @@ MCP 客户端
   │ POST /mcp-gateway/mcp
   │
   ▼
-Nginx (:8080)
-  │  location /mcp-gateway/ { proxy_pass http://127.0.0.1:8082/; }
-  │  ⚠️ 剥掉 /mcp-gateway/ 前缀
+HAProxy (:8080)
+  │  backend mcp_gw: /mcp-gateway/ → :8082 (regsub 剥前缀)
   │
   │ 转发路径: /mcp
   │
@@ -323,9 +322,8 @@ MCP 客户端
   │ (按 RFC 8414: <origin>/.well-known/oauth-authorization-server/<issuer_path>)
   │
   ▼
-Nginx (:8080)
-  │  location /.well-known/ { proxy_pass http://127.0.0.1:8081; }
-  │  ⚠️ 无 trailing slash，不剥前缀！
+HAProxy (:8080)
+  │  backend api_gw: /.well-known/ → :8081 (无 regsub，保留完整路径)
   │
   │ 转发路径: /.well-known/oauth-authorization-server/api-gateway/auth
   │           (完整路径保留)
@@ -359,9 +357,8 @@ MCP 客户端
   │ GET /mcp-gateway/.well-known/oauth-protected-resource/mcp
   │
   ▼
-Nginx (:8080)
-  │  location /mcp-gateway/ { proxy_pass http://127.0.0.1:8082/; }
-  │  ⚠️ 剥掉 /mcp-gateway/ 前缀
+HAProxy (:8080)
+  │  backend mcp_gw: /mcp-gateway/ → :8082 (regsub 剥前缀)
   │
   │ 转发路径: /.well-known/oauth-protected-resource/mcp
   │
@@ -386,7 +383,7 @@ Vue SPA (浏览器)
   │ (gatewayPrefix = '/api-gateway/auth', 由 pathname.indexOf('/auth') 动态计算)
   │
   ▼
-Nginx (:8080) → API Gateway (:8081)
+HAProxy (:8080) → API Gateway (:8081)
   │  StripPrefix=1 → /login
   │
   ▼
@@ -403,67 +400,74 @@ API Gateway (:8081) — RewriteResponseHeader
 
 ---
 
-## 5. Nginx 层详解
+## 5. HAProxy 层详解
 
 ### 5.1 配置
 
-```nginx
-server {
-    listen       8080;
-    server_name  _;
+```haproxy
+global
 
-    # 通用代理头
-    proxy_set_header Host              $host:$server_port;
-    proxy_set_header X-Real-IP         $remote_addr;
-    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Host  $host;
-    proxy_set_header X-Forwarded-Port  $server_port;
+defaults
+    mode http
+    timeout connect 10s
+    timeout client  65s
+    timeout server  65s
+    option dontlognull
 
-    # RFC 8414 AS 发现 (无 trailing slash，保留完整路径)
-    location /.well-known/ {
-        proxy_pass http://127.0.0.1:8081;
-    }
+frontend public
+    bind *:8080
+    http-response del-header Server
 
-    # API Gateway (trailing slash 剥 /api-gateway/ 前缀)
-    location /api-gateway/ {
-        proxy_set_header X-Forwarded-Prefix /api-gateway;
-        proxy_pass http://127.0.0.1:8081/;
-    }
+    acl is_mcp_gateway path_beg /mcp-gateway/
+    use_backend mcp_gw if is_mcp_gateway
 
-    # MCP Gateway (trailing slash 剥 /mcp-gateway/ 前缀)
-    location /mcp-gateway/ {
-        proxy_set_header X-Forwarded-Prefix /mcp-gateway;
-        proxy_pass http://127.0.0.1:8082/;
-        proxy_read_timeout  3600s;   # SSE 长连接
-        proxy_send_timeout  3600s;
-    }
+    default_backend api_gw
 
-    # 默认首页
-    location / {
-        default_type text/html;
-        return 200 '<h1>MCP Gateway</h1>...';
-    }
-}
+backend api_gw
+    server s 127.0.0.1:8081
+    acl has_prefix path_beg /api-gateway/
+    http-request set-path %[path,regsub(^/api-gateway/,/)] if has_prefix
+    http-request set-header X-Forwarded-Prefix /api-gateway if has_prefix
+    http-request set-header Host              %[req.hdr(Host)]
+    http-request set-header X-Real-IP         %[src]
+    http-request set-header X-Forwarded-For   %[src]
+    http-request set-header X-Forwarded-Proto http
+    http-request set-header X-Forwarded-Host  %[req.hdr(Host)]
+    http-request set-header X-Forwarded-Port  8080
+
+backend mcp_gw
+    server s 127.0.0.1:8082
+    http-request set-path %[path,regsub(^/mcp-gateway/,/)]
+    http-request set-header Host              %[req.hdr(Host)]
+    http-request set-header X-Real-IP         %[src]
+    http-request set-header X-Forwarded-For   %[src]
+    http-request set-header X-Forwarded-Proto http
+    http-request set-header X-Forwarded-Host  %[req.hdr(Host)]
+    http-request set-header X-Forwarded-Port  8080
+    http-request set-header X-Forwarded-Prefix /mcp-gateway
+    timeout server 3600s
+    timeout tunnel 3600s
 ```
 
 ### 5.2 路径重写行为
 
-| 请求路径 | 匹配 location | 转发到 | 转发路径 | 说明 |
-|----------|--------------|--------|----------|------|
-| `/.well-known/oauth-authorization-server/api-gateway/auth` | `/.well-known/` | :8081 | **原路径不变** | 无 trailing slash，不剥前缀 |
-| `/api-gateway/vue/` | `/api-gateway/` | :8081 | `/vue/` | 剥 `/api-gateway/` |
-| `/api-gateway/auth/oauth2/token` | `/api-gateway/` | :8081 | `/auth/oauth2/token` | 剥 `/api-gateway/` |
-| `/mcp-gateway/mcp` | `/mcp-gateway/` | :8082 | `/mcp` | 剥 `/mcp-gateway/` |
-| `/mcp-gateway/.well-known/...` | `/mcp-gateway/` | :8082 | `/.well-known/...` | 剥 `/mcp-gateway/` |
-| `/其他` | `/` | — | — | 返回 200 HTML 首页 |
+| 请求路径 | 匹配 ACL/Backend | 转发到 | 转发路径 | 说明 |
+|----------|-----------------|--------|----------|------|
+| `/.well-known/oauth-authorization-server/api-gateway/auth` | `default_backend api_gw` | :8081 | **原路径不变** | 无 regsub，不剥前缀 |
+| `/api-gateway/vue/` | `backend api_gw` | :8081 | `/vue/` | regsub 剥 `/api-gateway/` |
+| `/api-gateway/auth/oauth2/token` | `backend api_gw` | :8081 | `/auth/oauth2/token` | regsub 剥 `/api-gateway/` |
+| `/mcp-gateway/mcp` | `acl is_mcp_gateway → backend mcp_gw` | :8082 | `/mcp` | regsub 剥 `/mcp-gateway/` |
+| `/mcp-gateway/.well-known/...` | `acl is_mcp_gateway → backend mcp_gw` | :8082 | `/.well-known/...` | regsub 剥 `/mcp-gateway/` |
+| `/其他` | `default_backend api_gw` | :8081 | (由 API Gateway 处理) | api_gw 兜底 |
 
 ### 5.3 设计原则
 
-- ✅ **仅 proxy_pass**：不做任何 URL rewrite
-- ✅ **无 proxy_redirect**：302 Location 重写在 API Gateway 层完成
-- ✅ **无 rewrite 规则**：所有路径变换在 Gateway 层
-- ✅ **SSE 长连接支持**：mcp-gateway 的 timeout 设为 3600s
+- ✅ **仅 backend 路由**：不做任何 URL rewrite
+- ✅ **路径重写用 regsub**：`set-path %[path,regsub(^/prefix/,/)]` 剥前缀
+- ✅ **无 302 Location 重写**：Location 重写在 API Gateway 层完成
+- ✅ **SSE 长连接支持**：mcp_gw 的 timeout server/tunnel 设为 3600s
+- ✅ **Server 头隐藏**：`http-response del-header Server`
+- ✅ **每 backend 独立设置 header**：无继承，显式声明
 
 ---
 
@@ -674,7 +678,7 @@ mcp:
 </html>
 ```
 
-> 资源路径使用公网地址 `/api-gateway/vue/assets/...`，浏览器直接请求 Nginx。
+> 资源路径使用公网地址 `/api-gateway/vue/assets/...`，浏览器直接请求 HAProxy。
 
 ### 8.4 issuer 与公网地址
 
@@ -709,8 +713,8 @@ export default defineConfig({
 
 **base = `/api-gateway/vue/`** 的原因：
 - 浏览器解析 JS/CSS 资源时，URL 包含 `/api-gateway/` 前缀
-- 这样请求能匹配 Nginx 的 `location /api-gateway/`
-- 经过 Nginx → API Gateway → Vite 链路正确返回资源
+- 这样请求能匹配 HAProxy 的 `backend api_gw` (path_beg /api-gateway/)
+- 经过 HAProxy → API Gateway → Vite 链路正确返回资源
 
 ### 9.2 动态前缀检测 (App.vue)
 
@@ -741,7 +745,7 @@ Vite dev server 的 proxy 仅用于**开发模式直接访问 :9091** 的场景�
        → API Gateway → Auth Server
 ```
 
-生产环境下，浏览器请求直接走 Nginx :8080，不经过 Vite proxy。
+生产环境下，浏览器请求直接走 HAProxy :8080，不经过 Vite proxy。
 
 ---
 
@@ -782,7 +786,7 @@ Vite dev server 的 proxy 仅用于**开发模式直接访问 :9091** 的场景�
 
 | # | 方法 | URL | 状态码 | 说明 |
 |---|------|-----|--------|------|
-| 15 | GET | `http://localhost:8080/` | 200 | Nginx 首页 (HTML) |
+| 15 | GET | `http://localhost:8080/` | 200 | HAProxy 首页 (HTML) |
 | 16 | * | `http://localhost:9099/mcp` | — | MCP Bearer Proxy (调试用) |
 
 ---
@@ -849,10 +853,10 @@ MCP Gateway 通过 **SSE** 连接到后端 Weather Server：
 streamable-http:
   connections:
     weather:
-      url: http://localhost:9092/mcp    # 内部直连，不经过 Nginx
+      url: http://localhost:9092/mcp    # 内部直连，不经过 HAProxy
 ```
 
-> 后端 MCP Server 与 MCP Gateway 之间是**内部通信**，不经过 Nginx，无需认证。
+> 后端 MCP Server 与 MCP Gateway 之间是**内部通信**，不经过 HAProxy，无需认证。
 
 ### 11.5 MCP Bearer Proxy (调试辅助)
 
@@ -966,7 +970,7 @@ pi 已实现完整的 RFC 9728 流程：
 }
 ```
 
-pi 的 OAuth2 流程 (nginx access log 实测):
+pi 的 OAuth2 流程 (HAProxy access log 实测):
 
 ```
 POST /mcp-gateway/mcp                    → 401  (发现需认证)
@@ -1046,9 +1050,9 @@ Step 12: MCP tools/list 或 tools/call
 
 | 层 | 位置 | 输入 | 输出 | 机制 |
 |----|------|------|------|------|
-| Nginx | `/.well-known/` | `/.well-known/oauth-authorization-server/...` | 同 (不剥前缀) | proxy_pass 无 trailing slash |
-| Nginx | `/api-gateway/` | `/api-gateway/auth/oauth2/token` | `/auth/oauth2/token` | proxy_pass trailing slash 剥前缀 |
-| Nginx | `/mcp-gateway/` | `/mcp-gateway/mcp` | `/mcp` | proxy_pass trailing slash 剥前缀 |
+| HAProxy | `api_gw` (default) | `/.well-known/oauth-authorization-server/...` | 同 (不剥前缀) | 无 regsub，保留完整路径 |
+| HAProxy | `api_gw` | `/api-gateway/auth/oauth2/token` | `/auth/oauth2/token` | regsub 剥 /api-gateway/ 前缀 |
+| HAProxy | `mcp_gw` | `/mcp-gateway/mcp` | `/mcp` | regsub 剥 /mcp-gateway/ 前缀 |
 | Gateway | rfc8414 | `/.well-known/oauth-authorization-server/任意` | `/.well-known/openid-configuration` | RewritePath |
 | Gateway | auth-* | `/auth/oauth2/token` | `/oauth2/token` | StripPrefix=1 |
 | Gateway | vue-login | `/vue` | `/api-gateway/vue/` | RewritePath (加前缀+斜杠) |
@@ -1107,14 +1111,14 @@ Step 12: MCP tools/list 或 tools/call
   → PublicUrlFilter 重写内部 URL
 ```
 
-### 16.3 Nginx 安全
+### 16.3 HAProxy 安全
 
 ```
 仅暴露 :8080 端口
-  /api-gateway/  → :8081 (API Gateway)
-  /mcp-gateway/  → :8082 (MCP Gateway)
-  /.well-known/  → :8081 (RFC 8414)
-  /              → HTML 首页
+  /api-gateway/  → :8081 (backend api_gw)
+  /mcp-gateway/  → :8082 (backend mcp_gw)
+  /.well-known/  → :8081 (default_backend api_gw，无特殊处理)
+  /              → :8081 (default_backend api_gw 兜底)
 
 内部端口 :8081/:8082/:9090/:9091/:9092 不对外暴露
 ```
@@ -1125,7 +1129,7 @@ Step 12: MCP tools/list 或 tools/call
 
 | 文件 | 路径 | 说明 |
 |------|------|------|
-| Nginx 配置 | `D:/soft/nginx-1.27.4/conf/nginx.conf` | 反向代理，仅 proxy_pass |
+| HAProxy 配置 | `haproxy.cfg` | 反向代理，仅 backend 路由 + regsub |
 | API Gateway 配置 | `api-gateway/src/main/resources/application.yml` | 路由 + 过滤器 + 白名单 |
 | API Gateway 安全 | `api-gateway/src/main/java/es/omarall/mcp/apigateway/GatewaySecurityConfig.java` | 白名单 + JWT 验证 |
 | RewriteAuthUrls | `api-gateway/src/main/java/es/omarall/mcp/apigateway/RewriteAuthUrlsGatewayFilterFactory.java` | JSON body URL 重写 |
@@ -1151,8 +1155,7 @@ URL: http://localhost:8080/api-gateway/vue/
 [浏览器] GET /api-gateway/vue/
     |
     ▼
-[Nginx] location /api-gateway/ { proxy_pass http://127.0.0.1:8081/; }
-    | 剥 /api-gateway/ → 转发 /vue/
+[HAProxy] backend api_gw: /api-gateway/ → :8081 (regsub 剥前缀)
     |
     ▼
 [API Gateway] 路由 vue-login: Path=/vue
@@ -1168,7 +1171,7 @@ URL: http://localhost:8080/api-gateway/vue/
     GET /api-gateway/vue/assets/index-D4U55mnN.css
     |
     ▼
-[Nginx] → [API Gateway vue-assets] → [Vite] → 返回 JS/CSS
+[HAProxy] → [API Gateway vue-assets] → [Vite] → 返回 JS/CSS
     |
     ▼
 [浏览器] Vue SPA 渲染, 执行 App.vue:
@@ -1187,8 +1190,7 @@ URL: http://localhost:8080/api-gateway/vue/
     Body: { "method": "tools/call", "params": { "name": "getWeatherForecast", "arguments": { "latitude": 47.6062, "longitude": -122.3321 } } }
     |
     ▼
-[Nginx] location /mcp-gateway/ { proxy_pass http://127.0.0.1:8082/; }
-    | 剥 /mcp-gateway/ → 转发 /mcp
+[HAProxy] backend mcp_gw: /mcp-gateway/ → :8082 (regsub 剥前缀)
     |
     ▼
 [MCP Gateway :8082]
@@ -1205,7 +1207,7 @@ URL: http://localhost:8080/api-gateway/vue/
 [MCP Gateway] 组装 JSON-RPC 响应
     |
     ▼
-[Nginx] → [MCP Client]
+[HAProxy] → [MCP Client]
     200 { "jsonrpc": "2.0", "result": { "content": [...] } }
 ```
 
@@ -1214,10 +1216,10 @@ URL: http://localhost:8080/api-gateway/vue/
 ## 附录 B: 端口与依赖关系矩阵
 
 ```
-          │ Nginx │ API-GW │ MCP-GW │ Auth │ Vite │ Weather │ Proxy
+          │ HAProxy│ API-GW │ MCP-GW │ Auth │ Vite │ Weather │ Proxy
           │ :8080 │ :8081  │ :8082  │:9090 │:9091 │  :9092  │:9099
 ──────────┼───────┼────────┼────────┼──────┼──────┼─────────┼──────
-Nginx     │  self │   →    │   →    │      │      │         │
+HAProxy   │  self │   →    │   →    │      │      │         │
 API-GW    │       │  self  │        │  →   │  →   │         │
 MCP-GW    │       │        │  self  │  →   │      │    →    │
 Auth      │       │        │        │ self │      │         │
@@ -1307,7 +1309,7 @@ self = 自己监听    → = 依赖/连接到
 
 ### 架构
 - **页面**: API Gateway whitelist `/admin/**` → Vite:9094
-- **API 调用**: `/mcp-gateway/admin/**` (nginx 直连 8082, 避免 JWT 过滤)
+- **API 调用**: `/mcp-gateway/admin/**` (HAProxy 直连 8082, 避免 JWT 过滤)
 - **登录**: sys_user username/password → admin token (bcrypt)
 
 ### Dual SecurityFilterChain
@@ -1387,17 +1389,18 @@ null
 | v0.7.0 | H2: auth-info 脱敏 | 不返回 clientId/redirectUri |
 | v0.7.0 | M1: Cookie 安全 | SameSite=Lax + Path=/api-gateway/auth |
 | v0.7.0 | M2: CORS 限制 | localhost/127.0.0.1/null |
-| v0.7.0 | M3: server_tokens off | nginx 版本不泄露 |
+| v0.7.0 | M3: del-header Server | HAProxy 版本不泄露 |
 | v0.7.0 | M4: root / → 404 | 不泄露架构信息 |
 | v0.7.0 | M5: text/html Content-Type | LoginController |
 | v0.9.0 | CORS Origin:null | 浏览器表单 POST 支持 |
 | v0.9.0 | RFC 9728 动态 host | PRM/WWW-Authenticate 匹配请求 host |
-| v0.9.0 | nginx proxy_set_header | 每个 location 完整 7 个 header |
+| v0.9.0 | HAProxy http-request set-header | 每个 backend 完整 7 个 header |
 | v0.11.0 | AK 双部件模型 | ak-xxx:sk-yyy, 强随机密钥 |
 | v0.11.0 | 暴力破解防护 | 10 次 → 5 分钟封禁 |
 | v0.11.0 | bcrypt admin token | timing-safe 比较 |
 | v0.12.1 | Dual SecurityFilterChain | /admin/** 无 JWT 过滤 |
 | v0.13.1 | SDK issuer patch | 允许 path-based issuer |
+| v0.14.0 | HAProxy 替换 nginx | haproxy 2.8.26 (Cygwin), del-header Server, regsub 路径重写 |
 
 ---
 
@@ -1405,7 +1408,7 @@ null
 
 | 版本 | 里程碑 | 关键变更 |
 |------|--------|----------|
-| v0.1.0 | 基线 | Nginx + API Gateway + Auth + MCP Gateway + Vue |
+| v0.1.0 | 基线 | HAProxy + API Gateway + Auth + MCP Gateway + Vue |
 | v0.2.0 | Security fix | DCR secret 90d 过期, token TTL 可配置 |
 | v0.3.0 | 两层客户端 | DCR 禁止 client_credentials, public PKCE |
 | v0.4.0 | 双 MCP 后端 | +climate-server, 多租户路由 |
@@ -1424,13 +1427,14 @@ null
 | v0.12.2 | Admin 登录 UI | 用户名密码 + 用户/客户端 CRUD |
 | v0.13.0 | Admin v2 | 仪表盘 + 客户端详情 + 系统状态 |
 | **v0.13.1** | **SDK issuer patch** | **Patch @modelcontextprotocol/client RFC 9728** |
+| **v0.14.0** | **HAProxy 替换 nginx** | **haproxy 2.8.26 (Cygwin Windows build), del-header Server, regsub 路径重写** |
 
 ---
 
 ## 24. 生产部署检查清单
 
 ### 网络层
-- [ ] TLS (HTTPS) — nginx 配置证书
+- [ ] TLS (HTTPS) — HAProxy 配置证书
 - [ ] 内部端口绑定 `server.address: 127.0.0.1`
 - [ ] 防火墙规则阻止外部访问 9090-9099
 
@@ -1440,7 +1444,7 @@ null
 - [ ] bcrypt `admin-token-hash` (不用 plaintext `admin-token`)
 - [ ] `cookie.secure: true`
 - [ ] CORS 限制到生产域名
-- [ ] nginx `limit_req_zone` for `/oauth2/token`
+- [ ] HAProxy rate limiting for `/oauth2/token`
 
 ### MCP 层
 - [ ] AES-GCM 加密 secret 存储 (完成 HMAC 签名验证)
@@ -1454,4 +1458,4 @@ null
 
 ---
 
-*文档结束 — 封板 v0.13.1*
+*文档结束 — 封板 v0.14.0*
