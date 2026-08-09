@@ -37,7 +37,8 @@ class AuthorizationServerConfiguration {
 			.authorizeHttpRequests(auth -> {
 				auth
 					.requestMatchers("/.well-known/openid-configuration", "/vue-login", "/assets/**").permitAll();
-				// When DCR is disabled, block /oauth2/register
+				// When DCR is disabled, block /oauth2/register with 403
+				// (denyAll() causes 302 to login, leaking internal :9090 in Location)
 				if (!dcrEnabled) {
 					auth.requestMatchers("/oauth2/register").denyAll();
 				}
@@ -59,6 +60,16 @@ class AuthorizationServerConfiguration {
 
 		http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
 
+		// When DCR is disabled, denyAll() for /oauth2/register would normally
+		// trigger 302 to login page (leaking internal :9090 in Location header).
+		// Override AccessDeniedHandler to return 403 JSON instead.
+		http.exceptionHandling(ex -> ex
+				.accessDeniedHandler((request, response, ex2) -> {
+					response.setStatus(403);
+					response.setContentType("application/json");
+					response.getWriter().write("{\"error\":\"access_denied\",\"error_description\":\"DCR is disabled\"}");
+				}));
+
 		return http.build();
 	}
 
@@ -78,7 +89,12 @@ class AuthorizationServerConfiguration {
 
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration configuration = new CorsConfiguration();
-		configuration.setAllowedOriginPatterns(List.of("*"));
+		// Restrict CORS to known frontend origins (not wildcard in production)
+		configuration.setAllowedOriginPatterns(List.of(
+				"http://localhost:*",      // dev: Vue + nginx
+				"http://127.0.0.1:*"      // dev: loopback
+				// Production: add "https://your-domain.com"
+		));
 		configuration.setAllowedMethods(List.of("*"));
 		configuration.setAllowedHeaders(List.of("*"));
 		configuration.setAllowCredentials(true);

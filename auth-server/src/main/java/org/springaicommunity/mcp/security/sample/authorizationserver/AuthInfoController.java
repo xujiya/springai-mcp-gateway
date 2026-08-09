@@ -55,12 +55,12 @@ class AuthInfoController {
 		// Derive a human-readable client name from client_id
 		String clientName = deriveClientName(clientId);
 
+		// Only return safe fields — do NOT expose clientId/redirectUri
+		// (these could be used for phishing or unauthorized authorize requests)
 		return Map.of(
 			"pending", true,
-			"clientId", clientId != null ? clientId : "",
 			"clientName", clientName,
-			"scope", scope != null ? scope : "",
-			"redirectUri", redirectUri != null ? redirectUri : ""
+			"scope", scope != null ? scope : ""
 		);
 	}
 

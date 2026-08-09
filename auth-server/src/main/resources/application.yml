@@ -5,6 +5,10 @@ server:
     session:
       cookie:
         name: MCP_AUTHORIZATION_SERVER_SESSIONID
+        path: /api-gateway/ecso/auth
+        http-only: true
+        secure: false          # 开发HTTP; 生产改true
+        same-site: lax
 
 # MCP DCR (Dynamic Client Registration) security settings
 # These apply to clients registered via POST /oauth2/register
