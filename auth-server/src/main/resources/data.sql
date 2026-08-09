@@ -37,7 +37,7 @@ INSERT IGNORE INTO oauth2_registered_client (
     'Weather MCP Service',
     '["none"]',
     '["authorization_code","refresh_token"]',
-    '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback"]',
+    '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:19876/callback"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
     '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
@@ -57,7 +57,7 @@ INSERT IGNORE INTO oauth2_registered_client (
     'Climate MCP Service',
     '["none"]',
     '["authorization_code","refresh_token"]',
-    '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback"]',
+    '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:19876/callback"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
     '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
