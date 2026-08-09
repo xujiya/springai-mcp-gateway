@@ -115,6 +115,22 @@ public class McpServiceRouterController {
             return;
         }
 
+        // Check API Key service scope (if authenticated via API Key)
+        var auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        if (auth instanceof ApiKeyAuthenticationFilter.ApiKeyAuthentication apiKeyAuth) {
+            if (!apiKeyAuth.getApiKey().allowsService(serviceName)) {
+                log.warn("API key '{}' (scope={}) denied access to service '{}'",
+                        apiKeyAuth.getApiKey().getName(),
+                        apiKeyAuth.getApiKey().getServiceScope(),
+                        serviceName);
+                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                response.setContentType("application/json");
+                response.getWriter().write("{\"error\":\"access_denied\",\"message\":\"API key scope does not include service: " + serviceName + "\"}");
+                response.flushBuffer();
+                return;
+            }
+        }
+
         log.debug("Proxying {} /{}/mcp → {}", method, serviceName, backendUrl);
 
         try {

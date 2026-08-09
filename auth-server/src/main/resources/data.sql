@@ -55,10 +55,28 @@ INSERT IGNORE INTO oauth2_registered_client (
     NULL,
     NULL,
     'Climate MCP Service',
-    '["none"]',
+    '[["none"]',
     '["authorization_code","refresh_token"]',
     '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:19876/callback"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
     '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
+);
+
+-- Default API Key for AK static credential mode (对标阿里云 AccessKey)
+-- Key: ak-mcp-dev-20250613 (plaintext, shown once at creation)
+-- Hash: {bcrypt}$2a$10$9NxZWHqfcuSAVisfsX.PVOQ03KRmjY7zkcXrtdHrYywK6RuWOPS7u
+-- Service scope: * (all services)
+-- Expires: NULL = never expires (AK mode)
+INSERT IGNORE INTO mcp_api_key (id, name, api_key_hash, api_key_prefix, service_scope, description, created_by, expires_at, enabled)
+VALUES (
+    '1',
+    'default-dev-key',
+    '{bcrypt}$2a$10$9NxZWHqfcuSAVisfsX.PVOQ03KRmjY7zkcXrtdHrYywK6RuWOPS7u',
+    'ak-mcp-dev',
+    '*',
+    'Default development API key (AK mode, never expires)',
+    'system',
+    NULL,
+    1
 );
