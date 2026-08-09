@@ -1,85 +1,117 @@
-# MCP Gateway (Streamable HTTP + OAuth 2.1)
+# MCP Gateway — 纯透明代理 + JWT + API Key 认证
 
-MCP server based on Spring AI that acts as an OAuth 2.1 Resource Server. It exposes a Streamable HTTP endpoint that
-MCP clients use for discovery and tool invocation. In this branch the primary client is ChatGPT Connectors, which
-obtain tokens via Authorization Code + PKCE (public client, no secret). The gateway only validates Bearer tokens.
+> v0.13.1 封板 | 端口: 8082
 
-- Port: `8080`
-- MCP endpoint: `http://localhost:8080/mcp` (locally) / `https://<your-domain>/mcp` (via tunnel)
-- Requires: `Authorization: Bearer <access_token>` issued by your Authorization Server (module `auth-server`).
+## 架构 (v0.8.0+ 重构)
 
-## Run
+**纯透明代理** — 不聚合 MCP Client，不暴露 MCP Server 端点。
 
-1) Start the Authorization Server:
-
-- `mvn -q -pl auth-server spring-boot:run`
-
-2) Start the MCP Gateway:
-
-- `mvn -q -pl mcp-gateway spring-boot:run`
-
-Requirements: Java 25, Maven.
-
-## Configuration (gateway)
-
-File `mcp-gateway/src/main/resources/application.yml` (excerpt):
-
-```yaml
-server:
-  port: 8080
-spring:
-  ai:
-    mcp:
-      server:
-        enabled: true
-        protocol: streamable   # exposes /mcp
-        name: ${spring.application.name}
-      client:
-        enabled: true
-        name: mcp-client
-        version: 1.0.0
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          # Must match the public issuer of your Authorization Server
-          issuer-uri: https://<your-domain>
-mcp:
-  gateway:
-    prefixMode: STATIC
-    delimiter: "_"
-    staticPrefix: "gw"
+```
+请求 → JWT/API Key 验证 → McpServiceRouterController → Java HttpClient → 后端 MCP Server
 ```
 
-Notes:
+### 路由规则
 
-- The gateway aggregates tools from MCP client connections (e.g., official `mcp/*` images via stdio/docker) and exposes
-  them with the `gw_` prefix to avoid collisions.
-- Discovery is native to the MCP protocol; there is no separate REST catalog.
+| 路径 | 目标 | 工具 |
+|------|------|------|
+| `/weather/mcp` | `http://localhost:9092/mcp` | getAlerts, getWeatherForecast |
+| `/climate/mcp` | `http://localhost:9093/mcp` | getStormWarnings, getClimateForecast |
+| `/mcp` | **404** (统一端点已移除) | — |
 
-## Use with ChatGPT (Authorization Code + PKCE)
+新增后端 = 在 `ecso.mcp.services` 加一行 + 重启。
 
-This branch integrates with ChatGPT Connectors. ChatGPT performs the OAuth 2.1 Authorization Code + PKCE flow against
-your Authorization Server and injects `Authorization: Bearer <token>` on calls to `/mcp`.
+## 安全
 
-- Ensure your Authorization Server `issuer` equals the public domain served by your tunnel (for example, `https://dev.example.com`).
-- Configure Cloudflare Tunnel (single hostname, path-based routing) so that:
-  - `https://<your-domain>/mcp` → MCP Gateway on `localhost:8080`
-  - `https://<your-domain>/` → Authorization Server on `localhost:9090`
-- Register the gateway in ChatGPT Developer Mode. See `CHATGPT.md` for step-by-step screenshots.
+### 双 SecurityFilterChain
 
-> Previous Client Credentials examples (curl + `mcp-remote`) from earlier branches do not apply here.
+| Chain | Order | 匹配 | 认证 |
+|-------|-------|------|------|
+| 0 | `/admin/**` | permitAll | 控制器自行验证 admin token |
+| 1 | 其余所有 | JWT + API Key | BearerTokenAuthenticationFilter |
 
-## Useful environment variables
+### 认证方式
 
-- `SERVER_PORT` to change the port (default `8080`).
-- `SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI` to point the gateway to another issuer.
-- `SPRING_AI_*` to override MCP client/server connections.
+| 方式 | 格式 | 适用 |
+|------|------|------|
+| JWT Bearer | `Authorization: Bearer <jwt>` | MCP 客户端 OAuth2 流程 |
+| API Key Bearer | `Authorization: Bearer ak-xxx:sk-yyy` | 服务间调用 |
+| API Key HMAC | `X-AccessKey-Id` + `X-AccessKey-Signature` + `X-AccessKey-Timestamp` | 高安全模式 |
+| Admin Token | `Authorization: Bearer adm-xxx` | 管理控制台 |
+
+### API Key 双部件模型 (对标阿里云 AccessKey)
+
+- **AccessKey ID**: `ak-<20hex>` — 公开标识，用于查找
+- **AccessKey Secret**: `sk-<40hex>` — 私密，HMAC 模式下不传输，160-bit 熵
+- **暴力破解防护**: 10 次失败 → 5 分钟封禁 (ConcurrentHashMap)
+- **Admin Token**: bcrypt 比较 (timing-safe)
+
+### Per-Service WWW-Authenticate
+
+每个 MCP 服务端点 401 时返回自己的 PRM URL:
+```
+WWW-Authenticate: Bearer resource_metadata="http://localhost:8080/mcp-gateway/weather/.well-known/oauth-protected-resource"
+```
+
+## Admin API (AdminConsoleController)
+
+所有 `/admin/**` 路径走 Chain 0 (无 JWT 过滤)，控制器自行验证 admin token。
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/admin/login` | POST | sys_user 登录 → admin token |
+| `/admin/users` | GET/POST/PUT/DELETE | 用户 CRUD |
+| `/admin/clients` | GET/POST/DELETE | OAuth 客户端 CRUD |
+| `/admin/api-keys` | GET/POST/DELETE | API Key CRUD |
+| `/admin/system` | GET | Java 运行时信息 |
+
+## 关键文件
+
+```
+mcp-gateway/src/main/java/es/omarall/mcp/gateway/
+├── McpServiceRouterController.java    # 透明代理 (Java HttpClient streaming)
+├── SecurityConfiguration.java         # 双 SecurityFilterChain + BearerTokenResolver
+├── ApiKeyAuthenticationFilter.java     # AK 认证 (Bearer + HMAC)
+├── ServiceAwareBearerEntryPoint.java  # Per-Service WWW-Authenticate
+├── ApiKeyService.java                 # AK 验证 + 暴力破解防护
+├── controller/
+│   └── AdminConsoleController.java    # 管理 API
+├── entity/
+│   ├── ApiKey.java                    # 双部件 AccessKey
+│   ├── SysUser.java
+│   └── RegisteredClientEntity.java
+└── mapper/
+    ├── ApiKeyMapper.java
+    ├── SysUserMapper.java
+    └── RegisteredClientMapper.java
+```
+
+## 配置
+
+```yaml
+ecso:
+  mcp:
+    services:
+      weather: { url: http://localhost:9092/mcp }
+      climate: { url: http://localhost:9093/mcp }
+  auth-server:
+    public-url: http://localhost:8080/api-gateway/ecso/auth
+  mcp-server:
+    public-url: http://localhost:8080/mcp-gateway
+  api-key:
+    admin-token: adm-xxx          # dev
+    # admin-token-hash: {bcrypt}  # production
+```
+
+## 默认凭证 (开发环境)
+
+- API Key: `ak-36f8ea0fc5ad9937572d:sk-8665c9bbdd338e3ce03a0fdf115fbf65685b2b94`
+- Admin Token: `adm-a4596ca59d33d7cd005c2367a0c657c7`
+- **生产环境务必修改!**
 
 ## Troubleshooting
 
-- 401/invalid_token: verify the token is not expired and the `issuer`/`issuer-uri` is the public domain.
-- redirect_uri_mismatch: ensure `https://chatgpt.com/connector_platform_oauth_redirect` is present in the Authorization Server client.
-- 403: check the `Authorization` header uses the `Bearer <token>` format.
-- Ports in use: adjust `SERVER_PORT` or free ports 8080/9090.
-- Useful logs: enable `org.springframework.security=TRACE` and `org.springframework.ai=TRACE`.
+- **401 + WWW-Authenticate**: 正常 — MCP 客户端需先获取 token
+- **403 (scope)**: API Key 缺少 `mcp:read` scope
+- **401 (invalid_token)**: JWT 过期或 issuer 不匹配
+- **401 (rate limited)**: API Key 认证失败超 10 次，等 5 分钟
+- **Session ID missing**: 需先 `initialize` 获取 `Mcp-Session-Id`

@@ -1,6 +1,6 @@
 # ECSO MCP Gateway 系统 — 完整架构文档
 
-> 最后更新: 2026-08-08  
+> 最后更新: 2026-08-10 (封板 v0.13.1)
 > 项目根目录: `D:/AI Coding/mcp-gateways/springai-mcp-gateway/`
 
 ---
@@ -24,6 +24,13 @@
 15. [URL 重写规则汇总](#15-url-重写规则汇总)
 16. [白名单与安全策略](#16-白名单与安全策略)
 17. [配置文件索引](#17-配置文件索引)
+18. [API Key 认证详解](#18-api-key-认证详解)
+19. [管理控制台详解](#19-管理控制台详解)
+20. [MCP SDK RFC 8414 §3.3 修复](#20-mcp-sdk-rfc-8414-§33-修复)
+21. [CORS 配置详解](#21-cors-配置详解)
+22. [安全硬化汇总](#22-安全硬化汇总)
+23. [版本历史](#23-版本历史)
+24. [生产部署检查清单](#24-生产部署检查清单)
 
 ---
 
@@ -49,12 +56,14 @@
 
 | 服务 | 端口 | 协议 | 说明 |
 |------|------|------|------|
-| **Nginx** | 8080 | HTTP | 统一外部入口，反向代理 |
+| **Nginx** | 8080 | HTTP | 统一外部入口，反向代理，server_tokens off |
 | **API Gateway** | 8081 | HTTP (WebFlux) | 前端透传 + Auth 路由 + URL 重写 |
-| **MCP Gateway** | 8082 | HTTP (Servlet) | MCP Streamable HTTP 协议网关 |
-| **Auth Server** | 9090 | HTTP (Servlet) | Spring Authorization Server |
-| **Vite Dev Server** | 9091 | HTTP | Vue 前端开发服务器 |
+| **MCP Gateway** | 8082 | HTTP (Servlet) | 纯透明代理 + JWT验证 + API Key认证 + Admin API |
+| **Auth Server** | 9090 | HTTP (Servlet) | Spring Authorization Server + DCR + MySQL |
+| **Vite Dev Server** | 9091 | HTTP | Vue 登录前端开发服务器 (host: 0.0.0.0) |
 | **Weather MCP Server** | 9092 | HTTP | 天气 MCP 工具后端 |
+| **Climate MCP Server** | 9093 | HTTP | 气候 MCP 工具后端 |
+| **Vite Admin Console** | 9094 | HTTP | Vue3 管理控制台 (host: 0.0.0.0) |
 | **MCP Bearer Proxy** | 9099 | HTTP | 自动获取 Bearer Token 的代理 (调试用) |
 
 **内部通信关系**：
@@ -62,7 +71,9 @@
 ```
 Nginx(8080) ──proxy_pass──→ API Gateway(8081) ──proxy──→ Auth Server(9090)
                                          └──proxy──→ Vite Dev(9091)
-Nginx(8080) ──proxy_pass──→ MCP Gateway(8082) ──SSE/HTTP──→ Weather Server(9092)
+                                         └──proxy──→ Vite Admin(9094)
+Nginx(8080) ──proxy_pass──→ MCP Gateway(8082) ──HTTP──→ Weather Server(9092)
+                                                     └──HTTP──→ Climate Server(9093)
 API Gateway(8081) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 ```
@@ -89,9 +100,10 @@ MCP Gateway(8082) ──JWKS──→ Auth Server(9090)   (JWT 验证)
 │  location /.well-known/  ──→ proxy_pass 8081 (不剥前缀)              │
 │  location /api-gateway/  ──→ proxy_pass 8081/ (剥 /api-gateway/)     │
 │  location /mcp-gateway/  ──→ proxy_pass 8082/ (剥 /mcp-gateway/)     │
-│  location /              ──→ 200 HTML (首页)                        │
+│  location /              ──→ 404 (无信息泄露)                      │
 │                                                                     │
 │  ✗ 无 rewrite  ✗ 无 proxy_redirect  ✓ 仅 proxy_pass               │
+│  ✓ server_tokens off  ✓ 每个location完整proxy_set_header             │
 └───────┬──────────────────────┬──────────────────────────────────────┘
         │                      │
         ▼                      ▼
@@ -1246,7 +1258,7 @@ self = 自己监听    → = 依赖/连接到
 
 ```json
 {
-  "resource": "http://localhost:8080/mcp-gateway/mcp",
+  "resource": "http://localhost:8080/mcp-gateway/weather/mcp",
   "authorization_servers": ["http://localhost:8080/api-gateway/ecso/auth"],
   "resource_name": "Spring MCP Gateway",
   "bearer_methods_supported": ["header"],
@@ -1256,4 +1268,191 @@ self = 自己监听    → = 依赖/连接到
 
 ---
 
-*文档结束*
+## 18. API Key 认证详解
+
+### 双部件 AccessKey 模型 (对标阿里云 AccessKey)
+
+| 部件 | 格式 | 说明 |
+|------|------|------|
+| AccessKey ID | `ak-<20hex>` | 公开标识，用于查找 |
+| AccessKey Secret | `sk-<40hex>` | 私密，160-bit 熵，HMAC 模式下不传输 |
+
+### 认证模式
+
+| 模式 | 格式 | 安全级别 |
+|------|------|----------|
+| Bearer | `Authorization: Bearer ak-xxx:sk-yyy` | 中 (secret 传输) |
+| HMAC | `X-AccessKey-Id` + `X-AccessKey-Signature` + `X-AccessKey-Timestamp` | 高 (secret 不传输) |
+| Admin | `Authorization: Bearer adm-xxx` | 管理 (bcrypt 验证) |
+
+### 暴力破解防护
+- 10 次失败 → 5 分钟封禁 (per AccessKey ID)
+- ConcurrentHashMap 实现 (单实例)
+
+### Scope 执行
+- `mcp:read`: MCP 工具调用
+- `mcp:admin`: 管理操作
+- 缺少 scope → 403
+
+### 默认凭证 (开发环境)
+- API Key: `ak-36f8ea0fc5ad9937572d:sk-8665c9bbdd338e3ce03a0fdf115fbf65685b2b94`
+- Admin Token: `adm-a4596ca59d33d7cd005c2367a0c657c7`
+- **生产环境务必修改!**
+
+---
+
+## 19. 管理控制台详解
+
+### URL
+`http://localhost:8080/api-gateway/ecso/admin/`
+
+### 架构
+- **页面**: API Gateway whitelist `/ecso/admin/**` → Vite:9094
+- **API 调用**: `/mcp-gateway/admin/**` (nginx 直连 8082, 避免 JWT 过滤)
+- **登录**: sys_user username/password → admin token (bcrypt)
+
+### Dual SecurityFilterChain
+| Chain | Order | 匹配 | 认证 |
+|-------|-------|------|------|
+| 0 | `/admin/**` | permitAll | 控制器自行验证 adm-xxx token |
+| 1 | 其余所有 | JWT + API Key | BearerTokenAuthenticationFilter |
+
+### 页面
+| 页面 | 功能 |
+|------|------|
+| 📊 仪表盘 | 统计卡片 + 认证模式概览 |
+| 🔑 AK 凭证 | API Key CRUD + scope |
+| 📋 OAuth 客户端 | 客户端列表 + 详情面板 + 搜索/过滤 |
+| 👤 用户 | 用户 CRUD (admin 不可删除) |
+| 📡 MCP 服务 | 服务状态 + PRM + 连通性测试 |
+| 🛡️ 安全 | 认证流程图 + 姿态概览 |
+| 🖥️ 系统 | Java 版本/内存/线程/uptime/DCR |
+
+---
+
+## 20. MCP SDK RFC 8414 §3.3 修复
+
+### 问题
+`@modelcontextprotocol/client` v2.0.0-beta.5 的 issuer 校验有 bug:
+```js
+// index.mjs:1093
+const expectedIssuer = typeof authorizationServerUrl === "string" ? authorizationServerUrl : authorizationServerUrl.href;
+if (!(parsed.issuer === expectedIssuer || ...)) throw new IssuerMismatchError(...);
+```
+
+当 AS 的 issuer 带路径 (`http://localhost:8080/api-gateway/ecso/auth`) 时，
+SDK 用 `new URL(authorizationServers[0]).origin` (`http://localhost:8080`) 作 expectedIssuer，导致不匹配。
+
+### 修复 (Patch SDK, 不改 Gateway)
+```js
+// Patch 后: 额外允许同 origin 的 path-based issuer
+parsed.issuer === expectedIssuer
+  || new URL(expectedIssuer).origin === new URL(parsed.issuer).origin
+```
+
+### Patch 位置
+- `~/.pi/agent/npm/node_modules/@modelcontextprotocol/client/dist/index.mjs` (line 1093)
+- `~/.pi/agent/npm/node_modules/@modelcontextprotocol/client/dist/index.cjs` (line 1093)
+
+> ⚠️ SDK 升级后 patch 会丢失，需重新应用。
+
+---
+
+## 21. CORS 配置详解
+
+### AllowedOriginPatterns
+```
+http://localhost:*
+http://127.0.0.1:*
+null
+```
+
+### 为什么包含 `null`
+浏览器在 redirect 后的表单 POST 中发送 `Origin: null` (W3C opaque origin)。
+如果不允许 `null`，CORS 拦截导致 403。
+
+### 应用范围
+所有 3 个服务 (api-gateway, auth-server, mcp-gateway) 统一配置。
+
+### 生产环境
+限制为 `https://your-domain.com`，移除 `null` 和 `localhost:*`。
+
+---
+
+## 22. 安全硬化汇总
+
+| 版本 | 修复项 | 详情 |
+|------|--------|------|
+| v0.3.0 | 两层客户端模型 | DCR 客户端禁止 client_credentials |
+| v0.7.0 | H1: DCR denyAll → 403 JSON | 不泄露 localhost:9090 |
+| v0.7.0 | H2: auth-info 脱敏 | 不返回 clientId/redirectUri |
+| v0.7.0 | M1: Cookie 安全 | SameSite=Lax + Path=/api-gateway/ecso/auth |
+| v0.7.0 | M2: CORS 限制 | localhost/127.0.0.1/null |
+| v0.7.0 | M3: server_tokens off | nginx 版本不泄露 |
+| v0.7.0 | M4: root / → 404 | 不泄露架构信息 |
+| v0.7.0 | M5: text/html Content-Type | LoginController |
+| v0.9.0 | CORS Origin:null | 浏览器表单 POST 支持 |
+| v0.9.0 | RFC 9728 动态 host | PRM/WWW-Authenticate 匹配请求 host |
+| v0.9.0 | nginx proxy_set_header | 每个 location 完整 7 个 header |
+| v0.11.0 | AK 双部件模型 | ak-xxx:sk-yyy, 强随机密钥 |
+| v0.11.0 | 暴力破解防护 | 10 次 → 5 分钟封禁 |
+| v0.11.0 | bcrypt admin token | timing-safe 比较 |
+| v0.12.1 | Dual SecurityFilterChain | /admin/** 无 JWT 过滤 |
+| v0.13.1 | SDK issuer patch | 允许 path-based issuer |
+
+---
+
+## 23. 版本历史
+
+| 版本 | 里程碑 | 关键变更 |
+|------|--------|----------|
+| v0.1.0 | 基线 | Nginx + API Gateway + Auth + MCP Gateway + Vue |
+| v0.2.0 | Security fix | DCR secret 90d 过期, token TTL 可配置 |
+| v0.3.0 | 两层客户端 | DCR 禁止 client_credentials, public PKCE |
+| v0.4.0 | 双 MCP 后端 | +climate-server, 多租户路由 |
+| v0.5.0 | MySQL 持久化 | MyBatis-Plus, ClientSettings 手动解析 |
+| v0.5.1 | PKCE 验证 | 完整 DCR + PKCE + MCP 验证 |
+| v0.6.0 | 预注册模式 | DCR 可开关, 稳定 client_id |
+| v0.6.1 | 预注册验证 | 无 DCR 完整 PKCE 流程 |
+| v0.6.2 | 多租户 PRM | Per-Service WWW-Authenticate |
+| v0.7.0 | 安全硬化 | H1-H2, M1-M5, CORS, Cookie |
+| v0.8.0 | 纯透明代理 | 移除 MCP 聚合, McpServiceRouterController |
+| v0.9.0 | CORS+RFC9728 | Origin:null, 动态 host, 浏览器登录 |
+| v0.10.0 | API Key | 静态凭证 (对标阿里云) |
+| v0.11.0 | AK 安全 | 双部件 + 强随机 + 暴力破解防护 |
+| v0.12.0 | Admin 控制台 | Vue3 SPA, 7 页面 |
+| v0.12.1 | Admin API | Dual SecurityFilterChain, sys_user 登录 |
+| v0.12.2 | Admin 登录 UI | 用户名密码 + 用户/客户端 CRUD |
+| v0.13.0 | Admin v2 | 仪表盘 + 客户端详情 + 系统状态 |
+| **v0.13.1** | **SDK issuer patch** | **Patch @modelcontextprotocol/client RFC 9728** |
+
+---
+
+## 24. 生产部署检查清单
+
+### 网络层
+- [ ] TLS (HTTPS) — nginx 配置证书
+- [ ] 内部端口绑定 `server.address: 127.0.0.1`
+- [ ] 防火墙规则阻止外部访问 9090-9099
+
+### 应用层
+- [ ] DCR 关闭 (`mcp.dcr.enabled: false`)
+- [ ] 修改默认 admin 密码 (admin/admin → 强密码)
+- [ ] bcrypt `admin-token-hash` (不用 plaintext `admin-token`)
+- [ ] `cookie.secure: true`
+- [ ] CORS 限制到生产域名
+- [ ] nginx `limit_req_zone` for `/oauth2/token`
+
+### MCP 层
+- [ ] AES-GCM 加密 secret 存储 (完成 HMAC 签名验证)
+- [ ] 重新应用 MCP SDK issuer patch (如 SDK 升级)
+- [ ] pi mcp.json 使用 `oauth.clientId` (预注册模式)
+
+### 验证
+- [ ] 完整 DCR + PKCE + MCP 流程验证 (通过 :8080)
+- [ ] 安全审计 (所有 :8080 端点)
+- [ ] Admin 控制台功能验证
+
+---
+
+*文档结束 — 封板 v0.13.1*

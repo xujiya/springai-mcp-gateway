@@ -1,165 +1,239 @@
-# Spring AI MCP Gateway (Streamable HTTP + OAuth 2.1)
+# ECSO MCP Gateway — 完整安全参考项目
 
-Reference project that shows, end‑to‑end, how to configure:
+> 封板版本: **v0.13.1** | 最后更新: 2026-08-10
 
-- MCP clients: SSE (e.g., JetBrains Copilot) and stdio (Docker images `mcp/*`).
-- MCP server: SSE and Streamable HTTP (the gateway exposes `/mcp`).
-- Security modes: no auth, OAuth 2.1 with Client Credentials, and Authorization Code + PKCE (public client).
+端到端实现 **MCP (Model Context Protocol) 网关安全架构**的参考项目，包含：
 
-The goal is educational and practical: expose a local development environment so that ChatGPT can interact with it
-through a simple MCP gateway. We also document how to publish it to the Internet using **Cloudflare Tunnels**
-with path‑based routing—no reverse proxy in front of our services—and how to configure the ChatGPT Connector.
+- **Nginx** (8080) → **API Gateway** (8081) → Auth Server / Vue / Admin Console
+- **MCP Gateway** (8082) → Weather Server / Climate Server（纯透明代理）
+- **OAuth2 + DCR + PKCE** 完整 RFC 9728 流程
+- **双模认证**: JWT Bearer + API Key (AccessKey 双部件模型, 对标阿里云)
+- **管理控制台**: Vue3 SPA — AK 凭证 / OAuth 客户端 / 用户 / MCP 服务 / 安全仪表盘
+- **MySQL 8 + MyBatis-Plus** 持久化
 
-Important: this is not meant to be a production‑grade gateway. It’s a hands‑on reference that connects a few pieces to
-deliver a very visual use‑case: “Let ChatGPT operate my dev environment”. For an operational, hardened gateway, see
-`docker-mcp-gateway.md`.
+---
 
-Modules remain the same:
+## 项目结构
 
-- `auth-server/` – OAuth 2.1 Authorization Server (JWT issuer) on port 9090.
-- `mcp-gateway/` – Spring AI MCP server/client acting as a Resource Server on port 8080.
+```
+springai-mcp-gateway/
+├── api-gateway/          # Spring Cloud Gateway (WebFlux) :8081
+│   └── 前端透传 + Auth路由 + URL重写 + CORS
+├── auth-server/          # Spring Authorization Server :9090
+│   └── OAuth2 + DCR + PKCE + MySQL持久化
+├── mcp-gateway/          # 纯透明代理 + JWT验证 + AK认证 :8082
+│   └── McpServiceRouterController + AdminConsoleController
+├── weather-server/       # 天气MCP工具后端 :9092
+├── climate-server/       # 气候MCP工具后端 :9093
+├── login-ui-server/      # Vue 登录前端 (Vite :9091)
+├── admin-console/        # Vue3 管理控制台 (Vite :9094)
+├── nginx.conf            # Nginx :8080 (不改!)
+└── mcp-bearer-proxy.mjs  # 调试用 Bearer Token 代理 :9099
+```
 
-The public MCP endpoint is exposed at `https://<your-domain>/mcp` (through the tunnel) and protected with Bearer tokens
-obtained by ChatGPT through the OAuth flow against the Authorization Server at `https://<your-domain>`.
+## 服务清单
 
-## Scenarios & Branches
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| **Nginx** | 8080 | 统一外部入口, server_tokens off |
+| **API Gateway** | 8081 | 前端透传 + Auth 路由 + URL 重写 |
+| **MCP Gateway** | 8082 | 纯透明代理 + JWT + API Key + Admin API |
+| **Auth Server** | 9090 | Spring Authorization Server + DCR |
+| **Vite (Login)** | 9091 | Vue 前端开发服务器 |
+| **Weather Server** | 9092 | getAlerts + getWeatherForecast |
+| **Climate Server** | 9093 | getStormWarnings + getClimateForecast |
+| **Vite (Admin)** | 9094 | 管理控制台 |
 
-This repository uses branches to illustrate the evolution and the different auth modes:
+## 快速启动
 
-- [NO_AUTH_SSE](https://github.com/oalles/springai-mcp-gateway/tree/NO_AUTH_SSE) — SSE without security. Minimal Spring AI setup and wiring. Github Copilot using the gateway at `http://localhost:8080/sse`.
-- [OAUTH2.1_STREAMABLE](https://github.com/oalles/springai-mcp-gateway/tree/OAUTH2.1_STREAMABLE) — Streamable HTTP + OAuth 2.1 with Client Credentials (local issuer).
-- [OAUTH2.1_CHATGPT_TUNNELS](https://github.com/oalles/springai-mcp-gateway/tree/OAUTH2.1_CHATGPT_TUNNELS) — ChatGPT Connectors + Cloudflare Tunnels + OAuth 2.1 (Authorization Code + PKCE, this branch)
-  - Streamable HTTP at `/mcp` (Gateway on 8080). Multiple tools exposed through the same endpoint.
-  - Public client (no secret), ChatGPT completes the OAuth flow and manages refresh tokens.
-  - Single public hostname via Cloudflare Tunnel with path‑based routing. Resource Server validates JWTs from the public issuer.
+### 1. 构建
 
-## What Changed From `OAUTH2.1_STREAMABLE` to `OAUTH2.1_CHATGPT_TUNNELS`
+```bash
+JAVA_HOME="C:/Users/USER365110/.jdks/loom-ea-25-loom+1-11"
+mvn clean package -DskipTests
+```
 
-- Authentication flow: from Client Credentials → Authorization Code + PKCE with a public client (no secret).
-- Issuer and URLs: from `http://localhost:9090` → public `https://<your-domain>` through Cloudflare Tunnel.
-- ChatGPT integration: the connector completes the OAuth flow and manages token refresh automatically.
-- Resource Server keeps Streamable HTTP at `/mcp` and validates JWTs from the public issuer.
+### 2. 启动 MySQL
 
-![Demo](images/gateway-chatgpt.gif)
+确保 MySQL 8 运行，数据库 `mcp_auth` 已创建（schema.sql + data.sql 自动初始化）。
 
-## Project Structure
+### 3. 启动所有服务
 
-- Parent aggregator POM (`pom.xml`, packaging `pom`).
-- Modules:
-    - `auth-server/` – Authorization server configuration and keys. Config:
-      `auth-server/src/main/resources/application.yml` (port 9090).
-    - `mcp-gateway/` – MCP Gateway server/client and security. Config:
-      `mcp-gateway/src/main/resources/application.yml` (port 8080).
+```bash
+# Auth Server
+java -jar auth-server/target/auth-server-0.0.3-SNAPSHOT.jar &
 
-## Build
+# MCP Gateway
+java -jar mcp-gateway/target/mcp-gateway-0.0.3-SNAPSHOT.jar &
 
-- Build all modules: `mvn -q clean package`
+# API Gateway
+java -jar api-gateway/target/api-gateway-0.0.3-SNAPSHOT.jar &
 
-## Run (Local)
+# MCP 后端
+java -jar weather-server/target/weather-server-0.0.3-SNAPSHOT.jar &
+java -jar climate-server/target/climate-server-0.0.3-SNAPSHOT.jar &
 
-1) Start the Authorization Server (port 9090):
+# Vue 前端
+cd login-ui-server && npm run dev &
 
-- `mvn -q -pl auth-server spring-boot:run`
+# Admin 控制台
+cd admin-console && npm run dev &
 
-2) Start the MCP Gateway (port 8080):
+# Nginx
+nginx
+```
 
-- `mvn -q -pl mcp-gateway spring-boot:run`
+### 4. 验证
 
-## Cloudflare Tunnel
+```bash
+# AS Metadata
+curl http://localhost:8080/api-gateway/ecso/auth/.well-known/oauth-authorization-server
 
-- `cloudflared tunnel run mcp-gateway` # For Cloudflare Tunnel setup and path‑based routing, see [CLOUDFLARE.md](./CLOUDFLARE.md).
+# PRM (Weather)
+curl http://localhost:8080/mcp-gateway/weather/.well-known/oauth-protected-resource
 
-Traffic will be routed in my case, from  `https://dev.omarall.es`  to our local processes.   
+# 管理控制台
+open http://localhost:8080/api-gateway/ecso/admin/
+```
 
-## Register the Gateway in ChatGPT (OAuth 2.1 + PKCE)
+## 核心架构
 
-![ChatGpt.gif](images/ChatGPT-config.png)
+### 流量链路
 
-See [CHATGPT](./CHATGPT.md) for detailed steps.
+```
+浏览器/pi MCP ──→ Nginx(:8080) ──→ API Gateway(:8081) ──→ Auth Server(:9090)
+                                    └→ Vite(:9091/:9094)
+                 ──→ MCP Gateway(:8082) ──→ Weather(:9092)
+                                    └→ Climate(:9093)
+```
 
-## ⚠️ Security Notes 
+### MCP 路由 (Pattern B: Per-Service)
 
-This repository is a learning and integration reference, just that.
-Its goal is to demonstrate how to connect and configure Spring AI + MCP + OAuth 2.1.
+```
+/mcp-gateway/weather/mcp  →  http://localhost:9092/mcp  (getAlerts, getWeatherForecast)
+/mcp-gateway/climate/mcp  →  http://localhost:9093/mcp  (getStormWarnings, getClimateForecast)
+/mcp-gateway/mcp          →  404  (统一端点已移除)
+```
 
-Important security notes:
+新增 MCP 后端 = 在 `mcp-gateway/application.yml` 的 `ecso.mcp.services` 下加一行 + 重启。
 
-* **Do not use demo credentials in production**. The default in-memory user (omar/secret) is for local testing only.
+### 认证模式
 
-* CORS and CSRF are relaxed for simplicity. Always restrict origins, allowed methods, and re-enable CSRF when building real deployments.
+| 模式 | 适用场景 | 格式 |
+|------|---------|------|
+| **JWT Bearer** | MCP 客户端 OAuth2 流程 | `Authorization: Bearer <jwt>` |
+| **API Key Bearer** | 服务间调用 / 脚本 | `Authorization: Bearer ak-xxx:sk-yyy` |
+| **API Key HMAC** | 高安全服务间 (对标阿里云) | `X-AccessKey-Id` + `X-AccessKey-Signature` |
+| **Admin Token** | 管理控制台 API | `Authorization: Bearer adm-xxx` |
 
-* Scopes (mcp:read, mcp:write) are defined for illustration only — enforce real scope-based authorization when applicable.
+### DCR 两层客户端模型
 
-* Use HTTPS with verified domains and Zero Trust policies if publishing externally.
+| 客户端类型 | 注册方式 | 允许的 Grant Types | 用途 |
+|-----------|---------|-------------------|------|
+| DCR 动态注册 | POST /oauth2/register | authorization_code + refresh_token (PKCE) | MCP 客户端自动注册 |
+| 预注册管理客户端 | MySQL data.sql | client_credentials | 服务间 / 管理调用 |
+| 预注册 PKCE 客户端 | MySQL data.sql | authorization_code + refresh_token | pi / Claude Code |
 
-## Useful References
+## MCP SDK RFC 8414 §3.3 修复
 
-* https://spring.io/blog/2025/09/16/spring-ai-mcp-intro-blog
-* https://spring.io/blog/2025/09/19/spring-ai-1-1-0-M2-mcp-focused
-* https://www.danvega.dev/blog/cyc-mcp-server-spring-ai
-* https://github.com/spring-ai-community/mcp-security/
-* https://spring.io/blog/2025/09/30/spring-ai-mcp-server-security
-* https://blog.christianposta.com/understanding-mcp-authorization-step-by-step/
-* https://blog.christianposta.com/understanding-mcp-authorization-step-by-step-part-two/
-* https://blog.christianposta.com/understanding-mcp-authorization-step-by-step-part-three/
-* https://blog.christianposta.com/understanding-mcp-authorization-with-dynamic-client-registration/
-* https://blog.christianposta.com/api-keys-are-a-bad-idea-for-enterprise-llm-agent-and-mcp-access/
+**问题**: `@modelcontextprotocol/client` v2.0.0-beta.5 用 `new URL(asUrl).origin === issuer` 校验，
+当 issuer 带路径 (`http://localhost:8080/api-gateway/ecso/auth`) 与 origin (`http://localhost:8080`) 不匹配时报错。
 
-worker_processes  1;
-pid        logs/nginx.pid;
-error_log  logs/error.log;
+**修复**: Patch SDK 允许同 origin 的 path-based issuer:
 
-events {
-worker_connections  1024;
-}
+```js
+// 原始 (index.mjs:1093)
+parsed.issuer === expectedIssuer
 
-http {
-include       mime.types;
-default_type  application/octet-stream;
-sendfile      on;
-keepalive_timeout  65;
+// Patch 后 — 额外允许同 origin
+parsed.issuer === expectedIssuer
+  || new URL(expectedIssuer).origin === new URL(parsed.issuer).origin
+```
 
-    server {
-        listen       8080;
-        server_name  _;
+> ⚠️ SDK 升级后 patch 会丢失，需重新应用。
 
-        proxy_set_header Host              $host:$server_port;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header X-Forwarded-Host  $host;
-        proxy_set_header X-Forwarded-Port  $server_port;
+## 关键配置
 
-        # ─── RFC 8414 AS 发现: /.well-known/oauth-authorization-server/**
-        #     MCP 客户端按 RFC 8414 标准:
-        #     GET <origin>/.well-known/oauth-authorization-server/<issuer_path>
-        #     例: GET /.well-known/oauth-authorization-server/api-gateway/ecso/auth
-        #     需转发到 api-gateway 处理 (网关有 rfc8414 路由做 RewritePath)
-        location /.well-known/ {
-            proxy_pass http://127.0.0.1:8081;
-        }
+### Auth Server (`auth-server/application.yml`)
 
-        # ─── /api-gateway/** → api-gateway (8081) ───
-        location /api-gateway/ {
-            proxy_set_header X-Forwarded-Prefix /api-gateway;
-            proxy_pass http://127.0.0.1:8081/;
-        }
+```yaml
+mcp:
+  dcr:
+    enabled: true                    # 生产环境设 false
+    client-secret-expires-in: 90d
+    access-token-time-to-live: 24h
+    refresh-token-time-to-live: 1h
+```
 
-        # ─── /mcp-gateway/** → mcp-gateway (8082) ───
-        location /mcp-gateway/ {
-            proxy_set_header X-Forwarded-Prefix /mcp-gateway;
-            proxy_pass http://127.0.0.1:8082/;
-            proxy_read_timeout  3600s;
-            proxy_send_timeout  3600s;
-        }
+### MCP Gateway (`mcp-gateway/application.yml`)
 
-        location / {
-            default_type text/html;
-            return 200 '<h1>ECSO Gateway</h1>
-<p><a href="/api-gateway/ecso/vue">Login</a></p>
-<p><code>/api-gateway/ecso/auth/**</code> - OAuth2 + DCR</p>
-<p><code>/mcp-gateway/mcp</code> - MCP Tools</p>';
-        }
-    }
-}
+```yaml
+ecso:
+  mcp:
+    services:
+      weather:
+        url: http://localhost:9092/mcp
+      climate:
+        url: http://localhost:9093/mcp
+  auth-server:
+    public-url: http://localhost:8080/api-gateway/ecso/auth
+  mcp-server:
+    public-url: http://localhost:8080/mcp-gateway
+  api-key:
+    admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7    # dev
+    # admin-token-hash: {bcrypt}$2a$10$...                 # production
+```
 
+### Nginx — **不要修改!**
+
+所有 URL 重写在 API Gateway 层完成，Nginx 只做 `proxy_pass`。
+
+## 文档
+
+| 文档 | 说明 |
+|------|------|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 完整架构文档 |
+| [SECURITY-8080.md](SECURITY-8080.md) | :8080 安全评估 |
+| [SECURITY-AUDIT.md](SECURITY-AUDIT.md) | 详细安全审计 |
+| [CLOUDFLARE.md](CLOUDFLARE.md) | Cloudflare Tunnel 配置 |
+| [CHATGPT.md](CHATGPT.md) | ChatGPT Connector 配置 |
+
+## 版本历史
+
+| 版本 | 里程碑 |
+|------|--------|
+| v0.1.0 | 基线 (pre-security) |
+| v0.2.0 | Security fix (DCR secret expiry, token TTL) |
+| v0.3.0 | DCR 两层客户端模型 |
+| v0.4.0 | 双 MCP 后端 (weather + climate) |
+| v0.5.0 | MySQL + MyBatis-Plus 持久化 |
+| v0.6.0 | 预注册模式 (对标阿里云) |
+| v0.7.0 | Security 硬化验证 |
+| v0.8.0 | 纯透明代理重构 |
+| v0.9.0 | CORS + RFC 9728 + 浏览器登录 |
+| v0.10.0 | API Key 静态凭证 (对标阿里云 AccessKey) |
+| v0.11.0 | AK 双部件安全模型 + 暴力破解防护 |
+| v0.12.0 | Admin 控制台 Vue3 SPA |
+| v0.13.0 | Admin v2 (仪表盘 + 客户端详情 + 系统状态) |
+| **v0.13.1** | **MCP SDK RFC 9728 issuer patch** |
+
+## 生产部署检查清单
+
+- [ ] TLS (HTTPS) on nginx
+- [ ] Bind 内部端口到 127.0.0.1 + 防火墙
+- [ ] DCR 关闭 (`mcp.dcr.enabled: false`)
+- [ ] 修改默认 admin 密码
+- [ ] bcrypt `admin-token-hash` (不用 plaintext admin-token)
+- [ ] `cookie.secure: true`
+- [ ] CORS 限制到生产域名
+- [ ] nginx `limit_req_zone` for `/oauth2/token`
+- [ ] AES-GCM 加密 secret 存储 (HMAC 签名验证)
+- [ ] 重新应用 MCP SDK issuer patch (如 SDK 升级)
+
+## 参考
+
+- [RFC 9728 — OAuth 2.0 for MCP](https://datatracker.ietf.org/doc/html/rfc9728)
+- [RFC 8414 — Authorization Server Metadata](https://datatracker.ietf.org/doc/html/rfc8414)
+- [Spring AI MCP Server Security](https://spring.io/blog/2025/09/30/spring-ai-mcp-server-security)
+- [Understanding MCP Authorization (Christian Posta)](https://blog.christianposta.com/understanding-mcp-authorization-step-by-step/)
+- [API Keys are a Bad Idea for Enterprise LLM/MCP Access](https://blog.christianposta.com/api-keys-are-a-bad-idea-for-enterprise-llm-agent-and-mcp-access/)
