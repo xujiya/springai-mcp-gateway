@@ -137,12 +137,12 @@ export async function getProtectedResourceMetadata(service) {
 
 export async function checkMcpService(service) {
   try {
-    const { status } = await axios.post(
-      `${MCP_GATEWAY}/${service}/mcp`,
-      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'admin-console', version: '1.0' } } },
-      { headers: { 'Content-Type': 'application/json' } }
+    // Use PRM endpoint (GET, no auth required, always CORS-friendly)
+    // instead of MCP endpoint (POST, returns 401 without CORS headers)
+    const { status } = await axios.get(
+      `${MCP_GATEWAY}/${service}/.well-known/oauth-protected-resource`
     )
-    return status === 200 || status === 401
+    return status === 200
   } catch {
     return false
   }

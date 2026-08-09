@@ -44,6 +44,15 @@ public class ServiceAwareBearerEntryPoint implements AuthenticationEntryPoint {
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setHeader("WWW-Authenticate", "Bearer resource_metadata=" + prmUrl);
+
+        // Add CORS headers so browser can read the 401 response
+        // Without these, browser blocks the response and axios throws -> "offline"
+        String origin = request.getHeader("Origin");
+        if (origin != null && !origin.isEmpty()) {
+            response.setHeader("Access-Control-Allow-Origin", origin);
+            response.setHeader("Vary", "Origin");
+        }
+
         response.flushBuffer();
     }
 
