@@ -92,7 +92,8 @@ class AuthorizationServerConfiguration {
 		// Restrict CORS to known frontend origins (not wildcard in production)
 		configuration.setAllowedOriginPatterns(List.of(
 				"http://localhost:*",      // dev: Vue + nginx
-				"http://127.0.0.1:*"      // dev: loopback
+				"http://127.0.0.1:*",      // dev: loopback
+				"null"                     // W3C opaque origin: form submit after redirect
 				// Production: add "https://your-domain.com"
 		));
 		configuration.setAllowedMethods(List.of("*"));

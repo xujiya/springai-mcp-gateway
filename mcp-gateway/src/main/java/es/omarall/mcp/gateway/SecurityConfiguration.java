@@ -53,7 +53,8 @@ public class SecurityConfiguration {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(
                 "http://localhost:*",      // dev
-                "http://127.0.0.1:*"      // dev
+                "http://127.0.0.1:*",      // dev
+                "null"                     // W3C opaque origin: form submit after redirect
                 // Production: add "https://your-domain.com"
         ));
         configuration.setAllowedMethods(List.of("*"));

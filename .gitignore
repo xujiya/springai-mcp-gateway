@@ -31,3 +31,5 @@ build/
 ### VS Code ###
 .vscode/
 .idea
+node_modules/
+browser-test*.cjs
