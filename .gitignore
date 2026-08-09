@@ -33,3 +33,5 @@ build/
 .idea
 node_modules/
 browser-test*.cjs
+node_modules/
+admin-console/node_modules/

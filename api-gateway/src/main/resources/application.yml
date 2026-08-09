@@ -106,7 +106,18 @@ spring:
           filters:
             - RewritePath=/ecso/vue/(?<path>.*), /api-gateway/ecso/vue/$\{path}
 
-        # ⑨ 兜底: 其他 /ecso/auth/** 需认证 (也可能返回 302)
+        # ⑨ Admin Console — 公开 (Vue SPA on :9094)
+        # nginx 剥 /api-gateway/，请求到 api-gateway 是 /ecso/admin/**
+        # Vite base 已设为 /api-gateway/ecso/admin/，asset URL 自带完整前缀
+        # 所以 RewritePath 只需保留原始路径，不额外加前缀
+        - id: admin-console
+          uri: http://localhost:9094
+          predicates:
+            - Path=/ecso/admin/**
+          filters:
+            - RewritePath=/ecso/admin/(?<path>.*), /api-gateway/ecso/admin/$\{path}
+
+        # ⑩ 兜底: 其他 /ecso/auth/** 需认证 (也可能返回 302)
         - id: auth-other
           uri: http://localhost:9090
           predicates:
@@ -129,6 +140,7 @@ ecso:
       - /ecso/auth/login
       - /ecso/auth/oauth2/auth-info
       - /ecso/vue/**
+      - /ecso/admin/**
 
 logging:
   level:
