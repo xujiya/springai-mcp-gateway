@@ -5,6 +5,7 @@ export default defineConfig({
   base: '/api-gateway/ecso/admin/',
   plugins: [vue()],
   server: {
+    host: '0.0.0.0', // 必须绑定 0.0.0.0，否则 Vite 默认只绑 IPv6 [::1]，API Gateway (IPv4) 连不上
     port: 9094,
     proxy: {
       // API 调用 /mcp-gateway/ → nginx 已有，但 dev 模式需要直接代理

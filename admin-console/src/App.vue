@@ -7,6 +7,7 @@
         <h1>ECSO MCP 管理控制台</h1>
       </div>
       <div class="header-right">
+        <span v-if="isLoggedIn" class="user-badge">👤 {{ currentUser }}</span>
         <span class="auth-mode-badge">🔐 双认证模式</span>
         <button v-if="isLoggedIn" class="btn-logout" @click="logout">退出</button>
       </div>
@@ -16,19 +17,30 @@
     <div v-if="!isLoggedIn" class="login-gate">
       <div class="login-card">
         <h2>管理员登录</h2>
-        <p class="login-hint">请输入 Admin Token 访问管理控制台</p>
+        <p class="login-hint">使用系统账号登录管理控制台</p>
         <div class="form-group">
-          <label>Admin Token</label>
+          <label>用户名</label>
           <input
-            v-model="loginToken"
-            type="password"
-            placeholder="adm-xxxxxxxx..."
-            @keyup.enter="login"
-            class="input-token"
+            v-model="loginUsername"
+            type="text"
+            placeholder="admin"
+            @keyup.enter="$refs.pwdInput.focus()"
+            class="input-field"
           />
         </div>
-        <button class="btn-primary" @click="login" :disabled="!loginToken">
-          登录
+        <div class="form-group">
+          <label>密码</label>
+          <input
+            ref="pwdInput"
+            v-model="loginPassword"
+            type="password"
+            placeholder="••••••"
+            @keyup.enter="login"
+            class="input-field"
+          />
+        </div>
+        <button class="btn-primary" @click="login" :disabled="!loginUsername || !loginPassword || loginLoading">
+          {{ loginLoading ? '登录中...' : '登录' }}
         </button>
         <p v-if="loginError" class="error">{{ loginError }}</p>
       </div>
@@ -52,6 +64,8 @@
       <div class="tab-content">
         <ApiKeysView v-if="activeTab === 'ak'" />
         <OAuthView v-if="activeTab === 'oauth'" />
+        <UsersView v-if="activeTab === 'users'" />
+        <ClientsView v-if="activeTab === 'clients'" />
         <ServicesView v-if="activeTab === 'services'" />
         <SecurityView v-if="activeTab === 'security'" />
       </div>
@@ -61,46 +75,68 @@
 
 <script>
 import { ref } from 'vue'
-import { setAdminToken, clearAdminToken, getAdminToken, listApiKeys } from './api/admin.js'
+import { login as apiLogin, getAdminToken, clearAdminToken } from './api/admin.js'
 import ApiKeysView from './views/ApiKeysView.vue'
 import OAuthView from './views/OAuthView.vue'
+import UsersView from './views/UsersView.vue'
+import ClientsView from './views/ClientsView.vue'
 import ServicesView from './views/ServicesView.vue'
 import SecurityView from './views/SecurityView.vue'
 
 export default {
   name: 'App',
-  components: { ApiKeysView, OAuthView, ServicesView, SecurityView },
+  components: { ApiKeysView, OAuthView, UsersView, ClientsView, ServicesView, SecurityView },
   setup() {
     const isLoggedIn = ref(!!getAdminToken())
-    const loginToken = ref('')
+    const currentUser = ref(localStorage.getItem('admin_user') || '')
+    const loginUsername = ref('')
+    const loginPassword = ref('')
     const loginError = ref('')
+    const loginLoading = ref(false)
     const activeTab = ref('ak')
 
     const tabs = [
       { id: 'ak',       icon: '🔑', label: 'AK 静态凭证' },
-      { id: 'oauth',    icon: '🔐', label: 'OAuth 客户端' },
-      { id: 'services',  icon: '📡', label: 'MCP 服务' },
+      { id: 'oauth',    icon: '🔐', label: 'OAuth 状态' },
+      { id: 'users',    icon: '👤', label: '用户管理' },
+      { id: 'clients',  icon: '📋', label: 'OAuth 客户端' },
+      { id: 'services', icon: '📡', label: 'MCP 服务' },
       { id: 'security', icon: '🛡️', label: '安全状态' },
     ]
 
     async function login() {
       loginError.value = ''
+      loginLoading.value = true
       try {
-        setAdminToken(loginToken.value)
-        await listApiKeys()  // Verify token works
-        isLoggedIn.value = true
-      } catch {
-        clearAdminToken()
-        loginError.value = 'Token 无效，请检查后重试'
+        const data = await apiLogin(loginUsername.value, loginPassword.value)
+        if (data.adminToken) {
+          currentUser.value = data.username || loginUsername.value
+          localStorage.setItem('admin_user', currentUser.value)
+          isLoggedIn.value = true
+        } else {
+          loginError.value = data.error || '登录失败'
+        }
+      } catch (e) {
+        const msg = e.response?.data?.error || e.response?.data?.message || '登录失败'
+        loginError.value = msg
+      } finally {
+        loginLoading.value = false
       }
     }
 
     function logout() {
       clearAdminToken()
+      localStorage.removeItem('admin_user')
       isLoggedIn.value = false
+      currentUser.value = ''
     }
 
-    return { isLoggedIn, loginToken, loginError, login, logout, activeTab, tabs }
+    return {
+      isLoggedIn, currentUser,
+      loginUsername, loginPassword, loginError, loginLoading,
+      login, logout,
+      activeTab, tabs
+    }
   }
 }
 </script>
@@ -132,6 +168,12 @@ body {
 .header-left h1 { font-size: 18px; font-weight: 600; }
 .logo { font-size: 24px; }
 .header-right { display: flex; align-items: center; gap: 12px; }
+.user-badge {
+  background: rgba(255,255,255,0.15);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 12px;
+}
 .auth-mode-badge {
   background: rgba(255,255,255,0.2);
   padding: 4px 12px;
@@ -165,16 +207,15 @@ body {
 }
 .login-card h2 { margin-bottom: 8px; font-size: 22px; }
 .login-hint { color: #666; font-size: 14px; margin-bottom: 24px; }
-.input-token {
+.input-field {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 14px;
-  font-family: monospace;
   margin-top: 6px;
 }
-.input-token:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
+.input-field:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
 
 /* Main Layout */
 .main { flex: 1; display: flex; flex-direction: column; }
@@ -186,6 +227,7 @@ body {
   border-bottom: 1px solid #e0e0e0;
   padding: 0 24px;
   gap: 4px;
+  overflow-x: auto;
 }
 .tab {
   padding: 12px 20px;
@@ -197,6 +239,7 @@ body {
   color: #666;
   border-bottom: 2px solid transparent;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 .tab:hover { color: #1a73e8; }
 .tab.active { color: #1a73e8; border-bottom-color: #1a73e8; }

@@ -43,6 +43,55 @@ api.interceptors.response.use(
   }
 )
 
+// ─── Login (sys_user) ────────────────────────────────────
+
+export async function login(username, password) {
+  const { data } = await api.post(`${MCP_GATEWAY}/admin/login`, { username, password })
+  if (data.adminToken) {
+    setAdminToken(data.adminToken)
+  }
+  return data
+}
+
+// ─── User CRUD ───────────────────────────────────────────
+
+export async function listUsers() {
+  const { data } = await api.get(`${MCP_GATEWAY}/admin/users`)
+  return data
+}
+
+export async function createUser({ username, password }) {
+  const { data } = await api.post(`${MCP_GATEWAY}/admin/users`, { username, password })
+  return data
+}
+
+export async function updateUser(id, body) {
+  const { data } = await api.put(`${MCP_GATEWAY}/admin/users/${id}`, body)
+  return data
+}
+
+export async function deleteUser(id) {
+  const { data } = await api.delete(`${MCP_GATEWAY}/admin/users/${id}`)
+  return data
+}
+
+// ─── OAuth Client CRUD ───────────────────────────────────
+
+export async function listClients() {
+  const { data } = await api.get(`${MCP_GATEWAY}/admin/clients`)
+  return data
+}
+
+export async function createClient(body) {
+  const { data } = await api.post(`${MCP_GATEWAY}/admin/clients`, body)
+  return data
+}
+
+export async function deleteClient(clientId) {
+  const { data } = await api.delete(`${MCP_GATEWAY}/admin/clients/${clientId}`)
+  return data
+}
+
 // ─── API Key CRUD ────────────────────────────────────────
 
 export async function listApiKeys() {

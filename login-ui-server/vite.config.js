@@ -5,6 +5,7 @@ export default defineConfig({
   base: '/api-gateway/ecso/vue/',
   plugins: [vue()],
   server: {
+    host: '0.0.0.0',
     port: 9091,
     proxy: {
       // Vue app API calls go through api-gateway (nginx already strips /api-gateway/)
