@@ -1,6 +1,6 @@
 -- Default admin user (password: admin, bcrypt hash)
 INSERT IGNORE INTO sys_user (id, username, password, enabled, account_non_expired, account_non_locked, credentials_non_expired)
-VALUES (1, 'admin', '$2b$10$ABsfnCtp6Hkmzsk4myJCee0MHC/ogOWXR/DPKQMDI0VLXakrvKo46', 1, 1, 1, 1);
+VALUES (1, 'admin', '{bcrypt}$2a$10$v4/lTPr5mOE2OmfP9HVhWeAlHxGguZBS/rsO6n0Llzn1a2VjE6KCq', 1, 1, 1, 1);
 
 -- Pre-registered springai-gateway-client
 INSERT IGNORE INTO oauth2_registered_client (
