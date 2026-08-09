@@ -202,7 +202,7 @@ public class McpServiceRouterController {
                 org.springframework.boot.context.properties.bind.Binder.get(environment);
 
         var bound = binder.bind(
-                "spring.ai.mcp.client.streamable-http.connections",
+                "ecso.mcp.services",
                 Map.class
         );
 
@@ -211,7 +211,7 @@ public class McpServiceRouterController {
             Map<String, Object> connections = (Map<String, Object>) bound.get();
             for (String name : connections.keySet()) {
                 String url = environment.getProperty(
-                        "spring.ai.mcp.client.streamable-http.connections." + name + ".url");
+                        "ecso.mcp.services." + name + ".url");
                 if (url != null && !url.isBlank()) {
                     result.put(name, url);
                     log.info("Resolved MCP service '{}' → {}", name, url);

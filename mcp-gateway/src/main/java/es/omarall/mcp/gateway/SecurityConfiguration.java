@@ -1,6 +1,5 @@
 package es.omarall.mcp.gateway;
 
-import org.springaicommunity.mcp.security.server.config.McpServerOAuth2Configurer;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,49 +12,32 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * Security configuration for the MCP gateway.
+ * <p>
+ * The gateway is a pure transparent proxy — it does not expose its own MCP server
+ * endpoint. It validates JWT Bearer tokens on proxied requests and returns per-service
+ * WWW-Authenticate headers for RFC 9728 OAuth2 discovery.
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfiguration {
 
-    // Daniel Garnier-Moiroux  https://spring.io/blog/2025/09/30/spring-ai-mcp-server-security
-
-    @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}")
-    private String authServerUrl;
-
-    // Public URL for the authorization server (as seen by external clients through Nginx)
-    // Internal issuer-uri is used for JWT validation; public URL is used in 401 responses
     @Value("${ecso.auth-server.public-url:${spring.security.oauth2.resourceserver.jwt.issuer-uri}}")
     private String authServerPublicUrl;
 
-    // Public URL of this MCP server as seen by external clients through Nginx
-    // (without the trailing /mcp). Used to rewrite internal addresses in 401 responses
-    // and to override the `resource` claim of the protected-resource metadata body.
     @Value("${ecso.mcp-server.public-url:http://localhost:8080/mcp-gateway}")
     private String mcpServerPublicUrl;
 
-    // AuthorizationServer Configuration
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
-                // Allow .well-known endpoints without authentication (RFC 9728: clients
-                // must discover authorization servers before they have a token)
                 .authorizeHttpRequests(auth -> auth
+                        // RFC 9728: PRM endpoints are public (clients need them before having a token)
                         .requestMatchers("/*/.well-known/oauth-protected-resource").permitAll()
+                        // All MCP proxy endpoints require a valid token
                         .anyRequest().authenticated())
-                // Configure OAuth2 on the MCP server
-                .with(
-                        McpServerOAuth2Configurer.mcpServerOAuth2(),
-                        (mcpAuthorization) -> {
-                            mcpAuthorization.authorizationServer(this.authServerPublicUrl);
-                            mcpAuthorization.protectedResourceMetadataCustomizer(metadata -> metadata
-                                    .resource(this.mcpServerPublicUrl + "/mcp")
-                                    .authorizationServer(this.authServerPublicUrl)
-                                    .resourceName("Spring MCP Gateway")
-                                    .bearerMethod("header")
-                                    .scope("mcp:read")
-                                    .scope("mcp:write"));
-                        }
-                )
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
                 // Per-service WWW-Authenticate: /weather/mcp → /weather/.well-known/oauth-protected-resource
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(

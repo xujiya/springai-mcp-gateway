@@ -7,15 +7,15 @@ spring:
   ai:
     mcp:
       server:
-        enabled: true
+        enabled: false      # No MCP server endpoint — gateway is pure proxy, not an MCP server
         protocol: streamable
         name: ${spring.application.name}
       client:
-        enabled: true
+        enabled: false       # No MCP client aggregation — use transparent proxy via McpServiceRouterController
         name: mcp-client
         version: 1.0.0
         toolcallback:
-          enabled: false   # Use our GatewayProvidersConfig @Primary provider instead
+          enabled: false
         request-timeout: 30s
         sse:
           connections: {}
@@ -85,17 +85,17 @@ spring:
           issuer-uri: http://localhost:8080/api-gateway/ecso/auth
           jwk-set-uri: http://localhost:9090/oauth2/jwks
 
-mcp:
-  gateway:
-    prefixMode: ALIAS     # NONE | STATIC | ALIAS  — ALIAS: {connectionName}_{toolName}
-    delimiter: "_"
-    staticPrefix: "gw"
-
 ecso:
   auth-server:
     public-url: http://localhost:8080/api-gateway/ecso/auth
   mcp-server:
     public-url: http://localhost:8080/mcp-gateway
+  mcp:
+    services:
+      weather:
+        url: http://localhost:9092/mcp
+      climate:
+        url: http://localhost:9093/mcp
 
 logging:
   level:
