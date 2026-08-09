@@ -64,6 +64,13 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
             throws ServletException, IOException {
 
+        // Admin paths: skip entirely, let the controller handle auth
+        String path = request.getServletPath();
+        if (path != null && path.startsWith("/admin/")) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         if (!enabled) {
             filterChain.doFilter(request, response);
             return;
@@ -83,13 +90,13 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
         if (accessKeyId != null && signature != null) {
             String timestamp = request.getHeader("X-AccessKey-Timestamp");
             String method = request.getMethod();
-            String path = request.getRequestURI();
+            String requestUri = request.getRequestURI();
             // Note: Body SHA-256 would need caching the request body
             // For MCP (JSON-RPC), the body is typically small
             String bodySha256 = null; // TODO: compute from cached request body
 
             ApiKey apiKey = apiKeyService.validateBySignature(
-                    accessKeyId, signature, method, path, timestamp, bodySha256);
+                    accessKeyId, signature, method, requestUri, timestamp, bodySha256);
             if (apiKey != null) {
                 setAuthentication(apiKey, "HMAC");
                 filterChain.doFilter(request, response);

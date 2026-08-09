@@ -30,6 +30,16 @@ public class ServiceAwareBearerEntryPoint implements AuthenticationEntryPoint {
     public void commence(HttpServletRequest request, HttpServletResponse response,
                           AuthenticationException authException) throws IOException {
 
+        // Admin paths: let the controller handle auth (don't inject WWW-Authenticate)
+        String path = request.getServletPath();
+        if (path != null && path.startsWith("/admin/")) {
+            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+            response.setContentType("application/json");
+            response.getWriter().write("{\"error\":\"unauthorized\"}");
+            response.flushBuffer();
+            return;
+        }
+
         String prmUrl = resolvePrmUrl(request);
 
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
