@@ -9,6 +9,9 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationService;
 import org.springframework.security.oauth2.server.authorization.JdbcOAuth2AuthorizationConsentService;
 
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.proc.SecurityContext;
+
 /**
  * Provides JDBC-backed OAuth2 authorization and consent services.
  * RegisteredClientRepository is provided by MybatisRegisteredClientRepository.
@@ -28,5 +31,13 @@ public class OAuth2PersistenceConfig {
             JdbcOperations jdbcOperations,
             RegisteredClientRepository registeredClientRepository) {
         return new JdbcOAuth2AuthorizationConsentService(jdbcOperations, registeredClientRepository);
+    }
+
+    /**
+     * JWK key 持久化到 MySQL — auth-server 重启后 kid 不变, 已签发的 JWT 不失效.
+     */
+    @Bean
+    public JWKSource<SecurityContext> jwkSource(JdbcOperations jdbcOperations) {
+        return new PersistentJWKSource(jdbcOperations);
     }
 }

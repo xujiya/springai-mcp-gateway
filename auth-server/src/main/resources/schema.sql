@@ -92,3 +92,12 @@ CREATE TABLE IF NOT EXISTS mcp_api_key (
     INDEX idx_access_key_id (access_key_id),
     INDEX idx_prefix_enabled (access_key_prefix, enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='API Keys — dual-part AccessKey model (对标阿里云)';
+
+-- JWK Key Store — RSA signing key 持久化 (重启后 JWK kid 不变, 旧 token 不失效)
+CREATE TABLE IF NOT EXISTS oauth2_jwk_key (
+    id            VARCHAR(100)  NOT NULL PRIMARY KEY,
+    kid           VARCHAR(100)  NOT NULL UNIQUE COMMENT 'JWK Key ID',
+    jwk_json      TEXT          NOT NULL COMMENT 'Complete JWK JSON (RSA private key)',
+    created_at    TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expires_at    TIMESTAMP     DEFAULT NULL COMMENT 'NULL = no expiry (rotation policy)'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='JWK RSA key store — 持久化避免重启失效';
