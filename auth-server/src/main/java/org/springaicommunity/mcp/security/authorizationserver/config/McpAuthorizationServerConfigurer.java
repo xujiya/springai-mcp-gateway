@@ -32,8 +32,6 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.oauth2.core.OAuth2Token;
-import org.springframework.security.oauth2.server.authorization.authentication.PublicClientAuthenticationProvider;
-import org.springframework.security.oauth2.server.authorization.web.authentication.PublicClientAuthenticationConverter;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationServerMetadata;
 import org.springframework.security.oauth2.server.authorization.config.annotation.web.configurers.OAuth2ClientRegistrationEndpointConfigurer;
@@ -68,21 +66,9 @@ public class McpAuthorizationServerConfigurer
 		boolean dcrEnabled = Boolean.parseBoolean(env.getProperty("mcp.dcr.enabled", "true"));
 
 		http.with(authorizationServer(), authServer -> {
-		authServer
-				// MCP: 添加 PublicClientAuthenticationConverter+Provider 支持 public client (NONE) 刷新 token
-				.clientAuthentication(clientAuth -> {
-					ApplicationContext ctx = http.getSharedObject(ApplicationContext.class);
-					clientAuth
-						.authenticationConverters(converters ->
-							converters.add(new PublicClientAuthenticationConverter()))
-						.authenticationProviders(providers ->
-							providers.add(new PublicClientAuthenticationProvider(
-								ctx.getBean(org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository.class),
-								ctx.getBean(org.springframework.security.oauth2.server.authorization.OAuth2AuthorizationService.class))));
-				})
-				.authorizationServerMetadataEndpoint(
-					authorizationServerMetadataEndpoint -> authorizationServerMetadataEndpoint
-						.authorizationServerMetadataCustomizer(authorizationServerMetadataCustomizer(dcrEnabled)));
+		authServer.authorizationServerMetadataEndpoint(
+				authorizationServerMetadataEndpoint -> authorizationServerMetadataEndpoint
+					.authorizationServerMetadataCustomizer(authorizationServerMetadataCustomizer(dcrEnabled)));
 			OAuth2TokenGenerator<?> tokenGenerator = getTokenGenerator(http);
 			authServer.tokenGenerator(tokenGenerator);
 			System.out.println("[MCP] tokenGenerator set: " + tokenGenerator.getClass().getName());
