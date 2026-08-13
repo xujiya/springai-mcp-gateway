@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS oauth2_registered_client (
     redirect_uris                 VARCHAR(1000) DEFAULT NULL,
     scopes                        VARCHAR(1000) DEFAULT NULL,
     client_settings               VARCHAR(2000) NOT NULL,
-    token_settings                VARCHAR(2000) NOT NULL
+    token_settings                VARCHAR(2000) NOT NULL,
+    registration_source           VARCHAR(32)  DEFAULT NULL COMMENT 'DCR / PRE-REGISTERED / ADMIN'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- OAuth2 Authorization
@@ -64,6 +65,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     id                      BIGINT        NOT NULL PRIMARY KEY,
     username                VARCHAR(100)  NOT NULL UNIQUE,
     password                VARCHAR(255)  NOT NULL,
+    roles                   VARCHAR(255)  DEFAULT 'USER' COMMENT '逗号分隔角色，驱动 @PreAuthorize，如 ADMIN,USER',
     enabled                 TINYINT(1)    NOT NULL DEFAULT 1,
     account_non_expired     TINYINT(1)    NOT NULL DEFAULT 1,
     account_non_locked      TINYINT(1)    NOT NULL DEFAULT 1,

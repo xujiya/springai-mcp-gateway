@@ -11,6 +11,8 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.core.Ordered;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -53,9 +55,9 @@ class AuthorizationServerConfiguration {
 			.with(mcpAuthorizationServer(), withDefaults());
 
 		if (dcrEnabled) {
-			http.csrf(csrf -> csrf.ignoringRequestMatchers("/login", "/oauth2/register"));
+			http.csrf(csrf -> csrf.ignoringRequestMatchers("/login", "/oauth2/register", "/oauth2/consent", "/oauth2/admin/**"));
 		} else {
-			http.csrf(csrf -> csrf.ignoringRequestMatchers("/login"));
+			http.csrf(csrf -> csrf.ignoringRequestMatchers("/login", "/oauth2/consent", "/oauth2/admin/**"));
 		}
 
 		http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
@@ -73,6 +75,22 @@ class AuthorizationServerConfiguration {
 		return http.build();
 	}
 
+	/**
+	 * Register ConsentFilter at the servlet layer with HIGHEST_PRECEDENCE so it runs
+	 * BEFORE Spring Security's filter chain (which contains
+	 * OAuth2AuthorizationEndpointFilter). Using FilterRegistrationBean avoids the
+	 * "OAuth2AuthorizationEndpointFilter does not have a registered order" error that
+	 * http.addFilterBefore(..., OAuth2AuthorizationEndpointFilter.class) triggers.
+	 */
+	@Bean
+	FilterRegistrationBean<ConsentFilter> consentFilterRegistration() {
+		FilterRegistrationBean<ConsentFilter> reg = new FilterRegistrationBean<>();
+		reg.setFilter(new ConsentFilter());
+		reg.addUrlPatterns("/oauth2/authorize");
+		reg.setOrder(Ordered.HIGHEST_PRECEDENCE);
+		return reg;
+	}
+
 	/** Password encoder for client secrets and user passwords */
 	@Bean
 	PasswordEncoder passwordEncoder() {
@@ -83,7 +101,9 @@ class AuthorizationServerConfiguration {
 	@Bean
 	WebSecurityCustomizer publicEndpoints() {
 		return web -> web.ignoring().requestMatchers(
-				"/oauth2/auth-info"
+				"/oauth2/auth-info",
+				"/oauth2/consent-info",
+				"/oauth2/consent"
 		);
 	}
 

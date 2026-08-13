@@ -14,6 +14,8 @@ public class SysUser {
     private Long id;
     private String username;
     private String password;
+    /** 角色，逗号分隔，如 "ADMIN,USER"。驱动 @PreAuthorize 鉴权 */
+    private String roles;
     private Boolean enabled;
     private Boolean accountNonExpired;
     private Boolean accountNonLocked;

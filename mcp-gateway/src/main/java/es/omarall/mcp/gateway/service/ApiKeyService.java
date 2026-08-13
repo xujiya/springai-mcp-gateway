@@ -190,6 +190,52 @@ public class ApiKeyService {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // Validation: Bearer token mode (mcp_sk_xxx, MCP-friendly)
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * Validate an API key by its single Bearer token (mcp_sk_xxx).
+     * <p>
+     * This is the recommended mode for MCP clients that only support
+     * {@code Authorization: Bearer <token>}. The token is a single long-lived
+     * credential 对标阿里云 AccessKey 的长期有效性.
+     *
+     * @param token the Bearer token (e.g. "mcp_sk_X8v6-Vr9zCaUraLc8oKj")
+     * @return the ApiKey entity if valid, null otherwise
+     */
+    public ApiKey validateByToken(String token) {
+        if (token == null || !token.startsWith("mcp_sk_")) return null;
+
+        // Check rate limit (use token prefix as key)
+        String rateLimitKey = "token:" + token.substring(0, Math.min(token.length(), 12));
+        if (isRateLimited(rateLimitKey)) {
+            log.warn("Token '{}' is rate-limited", token.substring(0, 12) + "...");
+            return null;
+        }
+
+        // Scan all enabled keys and match token hash (bcrypt)
+        List<ApiKey> candidates = apiKeyMapper.selectList(
+                new LambdaQueryWrapper<ApiKey>()
+                        .eq(ApiKey::getEnabled, true)
+                        .isNotNull(ApiKey::getTokenHash));
+
+        for (ApiKey key : candidates) {
+            if (passwordEncoder.matches(token, key.getTokenHash())) {
+                if (key.isExpired()) {
+                    log.warn("Token for key '{}' (name={}) has expired", key.getAccessKeyId(), key.getName());
+                    return null;
+                }
+                clearFailedAttempts(rateLimitKey);
+                updateLastUsed(key);
+                return key;
+            }
+        }
+
+        recordFailedAttempt(rateLimitKey);
+        return null;
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // CRUD
     // ═══════════════════════════════════════════════════════════
 
@@ -221,14 +267,19 @@ public class ApiKeyService {
         String accessKeyId = "ak-" + generateRandomHex(10);
         // Generate AccessKey Secret: sk- + 40 hex chars (20 bytes, 160 bits entropy)
         String rawSecret = "sk-" + generateRandomHex(20);
+        // Generate Bearer token: mcp_sk_ + 28 base62 chars (对标阿里云 AK 长期凭证)
+        // 这是 MCP 客户端唯一需要的值，配置为 Authorization: Bearer mcp_sk_xxx
+        String token = "mcp_sk_" + generateRandomBase62(21);
         String prefix = accessKeyId.substring(0, 11); // ak- + 8 hex chars for prefix lookup
         String secretHash = passwordEncoder.encode(rawSecret);
+        String tokenHashStr = passwordEncoder.encode(token);
 
         ApiKey entity = new ApiKey();
         entity.setName(name);
         entity.setAccessKeyId(accessKeyId);
         entity.setAccessKeySecretHash(secretHash);
         entity.setAccessKeyPrefix(prefix);
+        entity.setTokenHash(tokenHashStr);
         entity.setServiceScope(serviceScope != null ? serviceScope : "*");
         entity.setDescription(description);
         entity.setCreatedBy(createdBy);
@@ -237,10 +288,10 @@ public class ApiKeyService {
         entity.setCreatedAt(Instant.now());
 
         apiKeyMapper.insert(entity);
-        log.info("Created API key '{}' (accessKeyId={}, prefix={}, scope={}, expires={})",
-                name, accessKeyId, prefix, serviceScope, expiresAt);
+        log.info("Created API key '{}' (accessKeyId={}, token=mcp_sk_...{}, scope={}, expires={})",
+                name, accessKeyId, token.substring(token.length() - 4), serviceScope, expiresAt);
 
-        return new CreateResult(accessKeyId, rawSecret, entity);
+        return new CreateResult(accessKeyId, rawSecret, token, entity);
     }
 
     /** Revoke (disable) an API key. */
@@ -360,6 +411,16 @@ public class ApiKeyService {
 
     // ─── Crypto Helpers ───────────────────────────────────────
 
+    private static String generateRandomBase62(int length) {
+        final String ALPHABET = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_";
+        java.security.SecureRandom rng = new java.security.SecureRandom();
+        StringBuilder sb = new StringBuilder(length);
+        for (int i = 0; i < length; i++) {
+            sb.append(ALPHABET.charAt(rng.nextInt(ALPHABET.length())));
+        }
+        return sb.toString();
+    }
+
     private static String generateRandomHex(int bytes) {
         byte[] random = new byte[bytes];
         new java.security.SecureRandom().nextBytes(random);
@@ -376,8 +437,8 @@ public class ApiKeyService {
 
     // ─── Inner Classes ────────────────────────────────────────
 
-    /** Result of creating a new API key — contains the plaintext secret (shown once!). */
-    public record CreateResult(String accessKeyId, String accessKeySecret, ApiKey entity) {}
+    /** Result of creating a new API key — contains the plaintext secret + token (shown once!). */
+    public record CreateResult(String accessKeyId, String accessKeySecret, String token, ApiKey entity) {}
 
     /** Rate limit tracking entry. */
     private record RateLimitEntry(int count, Instant blockedUntil) {

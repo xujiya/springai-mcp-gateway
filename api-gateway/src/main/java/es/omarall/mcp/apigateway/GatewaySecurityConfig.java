@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.web.server.SecurityWebFilterChain;
+import org.springframework.security.web.server.util.matcher.ServerWebExchangeMatchers;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.reactive.CorsWebFilter;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
@@ -24,6 +25,22 @@ public class GatewaySecurityConfig {
         this.whitelist = whitelist;
         this.issuerUri = env.getProperty(
                 "spring.security.oauth2.resourceserver.jwt.issuer-uri", "http://localhost:9090");
+    }
+
+    @Bean
+    @org.springframework.core.annotation.Order(-1)
+    SecurityWebFilterChain adminSecurityWebFilterChain(ServerHttpSecurity http) {
+        // Admin console paths: no OAuth2 resource server, no JWT validation.
+        // The downstream mcp-gateway/auth-server handle auth themselves.
+        // Without this, Bearer adm-xxx tokens would be rejected by the
+        // default chain's OAuth2 JWT decoder.
+        return http
+                .csrf(ServerHttpSecurity.CsrfSpec::disable)
+                .cors(cors -> cors.disable())
+                .securityMatcher(ServerWebExchangeMatchers.pathMatchers(
+                        "/ecso/admin/**"))
+                .authorizeExchange(exchanges -> exchanges.anyExchange().permitAll())
+                .build();
     }
 
     @Bean

@@ -24,9 +24,10 @@ import lombok.experimental.Accessors;
  * <ol>
  *   <li><b>HMAC Signed</b> (recommended, 对标阿里云): Client sends AccessKey ID +
  *       HMAC-SHA256 signature of the request. Secret never leaves the client.</li>
- *   <li><b>Bearer Token</b> (legacy/simple): Client sends secret directly as
- *       {@code X-API-Key: sk-xxx} or {@code Authorization: Bearer sk-xxx}.
+ *   <li><b>Bearer ak:sk</b> (legacy): Client sends {@code ak-xxx:sk-yyy} as Bearer token.
  *       Less secure — secret transmitted on every request.</li>
+ *   <li><b>Bearer token</b> (MCP-friendly): Single token {@code mcp_sk_xxx} as Bearer.
+ *       Cleanest for MCP clients that only support {@code Authorization: Bearer <token>}.</li>
  * </ol>
  */
 @Data
@@ -48,6 +49,15 @@ public class ApiKey {
 
     /** First 8 hex chars of AccessKey ID for efficient prefix lookup */
     private String accessKeyPrefix;
+
+    /**
+     * Bearer token hash — single-token form for MCP clients that only support
+     * {@code Authorization: Bearer <token>} (no custom headers).
+     * Format: {@code mcp_sk_<base62 chars>} (e.g. {@code mcp_sk_X8v6-Vr9zCaUraLc8oKj}).
+     * Stored as bcrypt hash — same security as AccessKey Secret.
+     * This is the long-lived credential 对标阿里云 AccessKey 的长期有效性.
+     */
+    private String tokenHash;
 
     /** Service scope: "*" = all services, "weather" = weather only, "weather,climate" = both */
     private String serviceScope;

@@ -23,4 +23,6 @@ public class RegisteredClientEntity {
     private String scopes;
     private String clientSettings;
     private String tokenSettings;
+    /** 注册来源: DCR (动态注册) / PRE-REGISTERED (data.sql 预置) / ADMIN (管理后台创建) */
+    private String registrationSource;
 }

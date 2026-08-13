@@ -111,6 +111,9 @@ public class SecurityConfiguration {
                 if (token.startsWith("adm-")) {
                     return null;
                 }
+                if (token.startsWith("mcp_sk_")) {
+                    return null;
+                }
                 return token;
             }
             return null;

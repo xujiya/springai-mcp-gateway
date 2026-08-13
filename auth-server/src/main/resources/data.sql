@@ -1,12 +1,15 @@
 -- Default admin user (password: admin, bcrypt hash)
-INSERT IGNORE INTO sys_user (id, username, password, enabled, account_non_expired, account_non_locked, credentials_non_expired)
-VALUES (1, 'admin', '{bcrypt}$2a$10$v4/lTPr5mOE2OmfP9HVhWeAlHxGguZBS/rsO6n0Llzn1a2VjE6KCq', 1, 1, 1, 1);
+INSERT IGNORE INTO sys_user (id, username, password, roles, enabled, account_non_expired, account_non_locked, credentials_non_expired)
+VALUES (1, 'admin', '{bcrypt}$2a$10$v4/lTPr5mOE2OmfP9HVhWeAlHxGguZBS/rsO6n0Llzn1a2VjE6KCq', 'ADMIN', 1, 1, 1, 1);
 
--- Pre-registered springai-gateway-client
+-- 幂等保证 admin 拥有 ADMIN 角色（驱动 @PreAuthorize，解锁管理端点）
+UPDATE sys_user SET roles = 'ADMIN' WHERE username = 'admin';
+
+-- Pre-registered springai-gateway-client (confidential, supports client_credentials)
 INSERT IGNORE INTO oauth2_registered_client (
     id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
     client_authentication_methods, authorization_grant_types, redirect_uris, scopes,
-    client_settings, token_settings
+    client_settings, token_settings, registration_source
 ) VALUES (
     'springai-gateway-client',
     'springai-gateway-client',
@@ -19,7 +22,8 @@ INSERT IGNORE INTO oauth2_registered_client (
     '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:8080/login/oauth2/code/authserver","http://127.0.0.1:8080/login/oauth2/code/authserver"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
-    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
+    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}',
+    'PRE-REGISTERED'
 );
 
 -- Pre-registered PKCE public clients for MCP services (stable client_id, like Alibaba Cloud)
@@ -27,7 +31,7 @@ INSERT IGNORE INTO oauth2_registered_client (
 INSERT IGNORE INTO oauth2_registered_client (
     id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
     client_authentication_methods, authorization_grant_types, redirect_uris, scopes,
-    client_settings, token_settings
+    client_settings, token_settings, registration_source
 ) VALUES (
     'mcp-weather-client',
     'mcp-weather-client',
@@ -40,14 +44,15 @@ INSERT IGNORE INTO oauth2_registered_client (
     '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:19876/callback"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
-    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
+    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}',
+    'PRE-REGISTERED'
 );
 
 -- Climate MCP client: use authorization_code + PKCE, no client_credentials
 INSERT IGNORE INTO oauth2_registered_client (
     id, client_id, client_id_issued_at, client_secret, client_secret_expires_at, client_name,
     client_authentication_methods, authorization_grant_types, redirect_uris, scopes,
-    client_settings, token_settings
+    client_settings, token_settings, registration_source
 ) VALUES (
     'mcp-climate-client',
     'mcp-climate-client',
@@ -55,12 +60,13 @@ INSERT IGNORE INTO oauth2_registered_client (
     NULL,
     NULL,
     'Climate MCP Service',
-    '[["none"]',
+    '["none"]',
     '["authorization_code","refresh_token"]',
     '["http://localhost:6274/oauth/callback","https://claude.ai/api/mcp/auth_callback","http://localhost:19876/callback"]',
     '["offline_access","mcp:read","mcp:write"]',
     '{"requireProofKey":true,"requireAuthorizationConsent":false}',
-    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}'
+    '{"accessTokenTimeToLive":"PT24H","refreshTokenTimeToLive":"P30D"}',
+    'PRE-REGISTERED'
 );
 
 -- Default API Key — dual-part AccessKey model (对标阿里云 AccessKey)

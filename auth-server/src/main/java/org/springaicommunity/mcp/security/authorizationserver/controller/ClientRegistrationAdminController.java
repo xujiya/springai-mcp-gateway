@@ -24,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import org.springaicommunity.mcp.security.authorizationserver.repository.RegistrationSourceHolder;
+
 /**
  * Admin API for pre-registering OAuth2 clients (like Alibaba Cloud OAuth2 app registration).
  * <p>
@@ -140,7 +142,12 @@ public class ClientRegistrationAdminController {
         builder.tokenSettings(TokenSettings.builder().build());
 
         RegisteredClient registeredClient = builder.build();
-        clientRepository.save(registeredClient);
+        try {
+            RegistrationSourceHolder.set("PRE-REGISTERED");
+            clientRepository.save(registeredClient);
+        } finally {
+            RegistrationSourceHolder.clear();
+        }
 
         log.info("Pre-registered client: id={}, clientId={}, public={}, grants={}",
                 registeredClient.getId(), registeredClient.getClientId(),

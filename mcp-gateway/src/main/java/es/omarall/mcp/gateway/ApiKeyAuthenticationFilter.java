@@ -116,11 +116,23 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
 
             ApiKey apiKey = apiKeyService.validateBySecret(kid, secret);
             if (apiKey != null) {
-                setAuthentication(apiKey, "BEARER");
+                setAuthentication(apiKey, "BEARER_AK_SK");
                 filterChain.doFilter(request, response);
                 return;
             }
-            log.debug("Bearer API key validation failed for AccessKey ID: {}", kid);
+            log.debug("Bearer ak:sk validation failed for AccessKey ID: {}", kid);
+        }
+
+        // Try Mode 3: Bearer token (mcp_sk_xxx, MCP-friendly, 对标阿里云长期凭证)
+        String bearerToken = resolveBearerToken(request);
+        if (bearerToken != null && bearerToken.startsWith("mcp_sk_")) {
+            ApiKey apiKey = apiKeyService.validateByToken(bearerToken);
+            if (apiKey != null) {
+                setAuthentication(apiKey, "BEARER_TOKEN");
+                filterChain.doFilter(request, response);
+                return;
+            }
+            log.debug("Bearer token validation failed for: {}", bearerToken.substring(0, Math.min(bearerToken.length(), 12)));
         }
 
         // No API key or invalid — pass through to JWT filter
@@ -147,6 +159,25 @@ public class ApiKeyAuthenticationFilter extends OncePerRequestFilter {
             }
         }
 
+        return null;
+    }
+
+    /**
+     * Resolve raw Bearer token from Authorization header (for Mode 3: mcp_sk_xxx).
+     */
+    private String resolveBearerToken(HttpServletRequest request) {
+        String authHeader = request.getHeader("Authorization");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            String token = authHeader.substring(7).trim();
+            if (token.startsWith("mcp_sk_")) {
+                return token;
+            }
+        }
+        // Also check X-API-Key header
+        String key = request.getHeader(headerName);
+        if (key != null && key.startsWith("mcp_sk_")) {
+            return key.trim();
+        }
         return null;
     }
 

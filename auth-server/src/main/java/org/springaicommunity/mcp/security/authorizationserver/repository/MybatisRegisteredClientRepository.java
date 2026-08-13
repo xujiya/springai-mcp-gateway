@@ -34,8 +34,13 @@ public class MybatisRegisteredClientRepository implements RegisteredClientReposi
         // Upsert: try insert, on duplicate key update
         RegisteredClientEntity existing = mapper.selectById(entity.getId());
         if (existing != null) {
+            // 更新时保留审计列（注册来源不应被覆盖）
+            entity.setRegistrationSource(existing.getRegistrationSource());
             mapper.updateById(entity);
         } else {
+            // 新插入：来源由调用方通过 RegistrationSourceHolder 注入（DCR / PRE-REGISTERED / ADMIN）
+            // 未设置时为 null —— 调用方应显式声明，避免启发式误判
+            entity.setRegistrationSource(RegistrationSourceHolder.get());
             mapper.insert(entity);
         }
     }

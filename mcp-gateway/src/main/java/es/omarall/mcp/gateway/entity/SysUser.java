@@ -14,6 +14,7 @@ public class SysUser {
     private Long id;
     private String username;
     private String password;
+    private String roles;
     private Boolean enabled;
     private Boolean accountNonExpired;
     private Boolean accountNonLocked;

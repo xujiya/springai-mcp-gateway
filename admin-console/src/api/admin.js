@@ -1,149 +1,167 @@
-import axios from 'axios'
+import axios from "axios";
 
 // ─── Config ──────────────────────────────────────────────
-// API 调用走 nginx 已有的 /mcp-gateway/ → 8082 路由
-// 页面走 api-gateway 白名单 /ecso/admin/ → 9094
-const MCP_GATEWAY = '/mcp-gateway'
-const AUTH_SERVER = '/api-gateway/ecso/auth'
+// 所有管理 API 走 API Gateway → mcp-gateway (统一 Bearer adm- token)
+// 公开端点走 HAProxy /mcp-gateway (PRM) + API Gateway /ecso/auth (AS metadata)
+const ADMIN_API = "/api-gateway/ecso/admin/mcp";
+const PUBLIC_MCP = "/mcp-gateway";
+const PUBLIC_AUTH = "/api-gateway/ecso/auth";
 
 // Admin token — localStorage
-let adminToken = localStorage.getItem('admin_token') || ''
+let adminToken = localStorage.getItem("admin_token") || "";
 
 export function setAdminToken(token) {
-  adminToken = token
-  localStorage.setItem('admin_token', token)
+	adminToken = token;
+	localStorage.setItem("admin_token", token);
 }
 
 export function getAdminToken() {
-  return adminToken
+	return adminToken;
 }
 
 export function clearAdminToken() {
-  adminToken = ''
-  localStorage.removeItem('admin_token')
+	adminToken = "";
+	localStorage.removeItem("admin_token");
 }
 
-// ─── Axios Instance ──────────────────────────────────────
-const api = axios.create()
+// ─── Axios Instance (Bearer adm- token) ──────────────────
+const api = axios.create();
 
-api.interceptors.request.use(config => {
-  if (adminToken) {
-    config.headers.Authorization = `Bearer ${adminToken}`
-  }
-  return config
-})
+api.interceptors.request.use((config) => {
+	if (adminToken) {
+		config.headers.Authorization = `Bearer ${adminToken}`;
+	}
+	return config;
+});
 
 api.interceptors.response.use(
-  res => res,
-  err => {
-    if (err.response?.status === 401) {
-      clearAdminToken()
-    }
-    return Promise.reject(err)
-  }
-)
+	(res) => res,
+	(err) => {
+		if (err.response?.status === 401) {
+			clearAdminToken();
+		}
+		return Promise.reject(err);
+	},
+);
 
-// ─── Login (sys_user) ────────────────────────────────────
+// ─── Login ───────────────────────────────────────────────
 
 export async function login(username, password) {
-  const { data } = await api.post(`${MCP_GATEWAY}/admin/login`, { username, password })
-  if (data.adminToken) {
-    setAdminToken(data.adminToken)
-  }
-  return data
+	const { data } = await api.post(`${ADMIN_API}/admin/login`, {
+		username,
+		password,
+	});
+	if (data.adminToken) {
+		setAdminToken(data.adminToken);
+	}
+	return data;
 }
 
 // ─── User CRUD ───────────────────────────────────────────
 
 export async function listUsers() {
-  const { data } = await api.get(`${MCP_GATEWAY}/admin/users`)
-  return data
+	const { data } = await api.get(`${ADMIN_API}/admin/users`);
+	return data;
 }
 
-export async function createUser({ username, password }) {
-  const { data } = await api.post(`${MCP_GATEWAY}/admin/users`, { username, password })
-  return data
+export async function createUser({ username, password, roles }) {
+	const { data } = await api.post(`${ADMIN_API}/admin/users`, {
+		username,
+		password,
+		roles,
+	});
+	return data;
 }
 
 export async function updateUser(id, body) {
-  const { data } = await api.put(`${MCP_GATEWAY}/admin/users/${id}`, body)
-  return data
+	const { data } = await api.put(`${ADMIN_API}/admin/users/${id}`, body);
+	return data;
 }
 
 export async function deleteUser(id) {
-  const { data } = await api.delete(`${MCP_GATEWAY}/admin/users/${id}`)
-  return data
+	const { data } = await api.delete(`${ADMIN_API}/admin/users/${id}`);
+	return data;
 }
 
-// ─── OAuth Client CRUD ───────────────────────────────────
+// ─── OAuth Client 列表 (只读, mcp-gateway) ─────────────
 
 export async function listClients() {
-  const { data } = await api.get(`${MCP_GATEWAY}/admin/clients`)
-  return data
+	const { data } = await api.get(`${ADMIN_API}/admin/clients`);
+	return data;
 }
 
-export async function createClient(body) {
-  const { data } = await api.post(`${MCP_GATEWAY}/admin/clients`, body)
-  return data
+export async function createClient(/* body */) {
+	throw new Error("Client registration 请用 DCR 端点");
 }
 
-export async function deleteClient(clientId) {
-  const { data } = await api.delete(`${MCP_GATEWAY}/admin/clients/${clientId}`)
-  return data
+export async function deleteClient(/* clientId */) {
+	throw new Error("Client deletion 请用 DCR 端点");
 }
 
 // ─── API Key CRUD ────────────────────────────────────────
 
 export async function listApiKeys() {
-  const { data } = await api.get(`${MCP_GATEWAY}/admin/api-keys`)
-  return data
+	const { data } = await api.get(`${ADMIN_API}/admin/api-keys`);
+	return data;
 }
 
-export async function createApiKey({ name, serviceScope, description, createdBy, expiresAt }) {
-  const { data } = await api.post(`${MCP_GATEWAY}/admin/api-keys`, {
-    name, serviceScope, description, createdBy, expiresAt
-  })
-  return data
+export async function createApiKey({
+	name,
+	serviceScope,
+	description,
+	createdBy,
+	expiresAt,
+}) {
+	const { data } = await api.post(`${ADMIN_API}/admin/api-keys`, {
+		name,
+		serviceScope,
+		description,
+		createdBy,
+		expiresAt,
+	});
+	return data;
 }
 
 export async function revokeApiKey(id) {
-  const { data } = await api.put(`${MCP_GATEWAY}/admin/api-keys/${id}/revoke`)
-  return data
+	const { data } = await api.put(`${ADMIN_API}/admin/api-keys/${id}/revoke`);
+	return data;
 }
 
 export async function enableApiKey(id) {
-  const { data } = await api.put(`${MCP_GATEWAY}/admin/api-keys/${id}/enable`)
-  return data
+	const { data } = await api.put(`${ADMIN_API}/admin/api-keys/${id}/enable`);
+	return data;
 }
 
 export async function deleteApiKey(id) {
-  const { data } = await api.delete(`${MCP_GATEWAY}/admin/api-keys/${id}`)
-  return data
+	const { data } = await api.delete(`${ADMIN_API}/admin/api-keys/${id}`);
+	return data;
 }
 
-// ─── OAuth2 Info ─────────────────────────────────────────
+// ─── OAuth2 Info (public) ────────────────────────────────
 
 export async function getAuthServerMetadata() {
-  const { data } = await axios.get(`${AUTH_SERVER}/.well-known/oauth-authorization-server`)
-  return data
+	const { data } = await axios.get(
+		`${PUBLIC_AUTH}/.well-known/oauth-authorization-server`,
+	);
+	return data;
 }
 
 export async function getProtectedResourceMetadata(service) {
-  const { data } = await axios.get(`${MCP_GATEWAY}/${service}/.well-known/oauth-protected-resource`)
-  return data
+	const { data } = await axios.get(
+		`${PUBLIC_MCP}/${service}/.well-known/oauth-protected-resource`,
+	);
+	return data;
 }
 
 // ─── MCP Service Status ──────────────────────────────────
 
 export async function checkMcpService(service) {
-  try {
-    // Use PRM endpoint (GET, no auth required, always CORS-friendly)
-    // instead of MCP endpoint (POST, returns 401 without CORS headers)
-    const { status } = await axios.get(
-      `${MCP_GATEWAY}/${service}/.well-known/oauth-protected-resource`
-    )
-    return status === 200
-  } catch {
-    return false
-  }
+	try {
+		const { status } = await axios.get(
+			`${PUBLIC_MCP}/${service}/.well-known/oauth-protected-resource`,
+		);
+		return status === 200;
+	} catch {
+		return false;
+	}
 }

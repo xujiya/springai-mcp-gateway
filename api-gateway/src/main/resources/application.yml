@@ -69,8 +69,10 @@ spring:
             - Path=/ecso/auth/oauth2/authorize
           filters:
             - StripPrefix=2
+            # response filter 按声明倒序执行: vue-consent/vue-login 后声明=先匹配, 9090/ 兼底
             - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
             - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
+            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-consent, http://localhost:8080/api-gateway/ecso/vue/consent
 
         # ⑤ Login POST — 公开 (登录成功后 302 重定向)
         - id: auth-login
@@ -90,6 +92,22 @@ spring:
           filters:
             - StripPrefix=2
 
+        # ⑥-bis consent — 公开（consent 标记 + 回跳 authorize, CSRF 豁免）
+        - id: auth-consent
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/consent
+          filters:
+            - StripPrefix=2
+
+        # ⑥-ter consent-info — 公开（consent 页拉取客户端展示信息）
+        - id: auth-consent-info
+          uri: http://localhost:9090
+          predicates:
+            - Path=/ecso/auth/oauth2/consent-info
+          filters:
+            - StripPrefix=2
+
         # ⑦ Vue 登录页 — 公开（nginx 剥了 /api-gateway/，需加回前缀给 Vite）
         - id: vue-login
           uri: http://localhost:9091
@@ -106,7 +124,17 @@ spring:
           filters:
             - RewritePath=/ecso/vue/(?<path>.*), /api-gateway/ecso/vue/$\{path}
 
-        # ⑨ Admin Console — 公开 (Vue SPA on :9094)
+        # ⑨ Admin API → mcp-gateway (users + api-keys, Bearer adm- token)
+        # 必须在 admin-console 之前声明, 否则 /ecso/admin/** catch-all 会先匹配
+        # /ecso/admin/mcp/admin/** → mcp-gateway:8082/admin/**
+        - id: admin-api-mcp-gateway
+          uri: http://localhost:8082
+          predicates:
+            - Path=/ecso/admin/mcp/admin/**
+          filters:
+            - StripPrefix=3
+
+        # ⑩ Admin Console — 公开 (Vue SPA on :9094)
         # nginx 剥 /api-gateway/，请求到 api-gateway 是 /ecso/admin/**
         # Vite base 已设为 /api-gateway/ecso/admin/，asset URL 自带完整前缀
         # 所以 RewritePath 只需保留原始路径，不额外加前缀
@@ -139,8 +167,12 @@ ecso:
       - /ecso/auth/oauth2/jwks
       - /ecso/auth/login
       - /ecso/auth/oauth2/auth-info
+      - /ecso/auth/oauth2/consent
+      - /ecso/auth/oauth2/consent-info
       - /ecso/vue/**
       - /ecso/admin/**
+      - /ecso/admin/mcp/admin/**
+      - /ecso/admin/auth/oauth2/admin/**
 
 logging:
   level:

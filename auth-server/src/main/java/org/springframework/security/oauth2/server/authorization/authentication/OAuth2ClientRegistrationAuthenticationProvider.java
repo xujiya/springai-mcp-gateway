@@ -41,6 +41,8 @@ import org.springframework.util.Assert;
 import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 
+import org.springaicommunity.mcp.security.authorizationserver.repository.RegistrationSourceHolder;
+
 /**
  * An {@link AuthenticationProvider} implementation for the OAuth 2.0 Dynamic Client
  * Registration Endpoint.
@@ -82,6 +84,8 @@ public final class OAuth2ClientRegistrationAuthenticationProvider implements Aut
 
 	@Override
 	public Authentication authenticate(Authentication authentication) throws AuthenticationException {
+		RegistrationSourceHolder.set("DCR");
+		try {
 		OAuth2ClientRegistrationAuthenticationToken clientRegistrationAuthentication = (OAuth2ClientRegistrationAuthenticationToken) authentication;
 
 		if (!isValidRedirectUris(clientRegistrationAuthentication.getClientRegistration().getRedirectUris())) {
@@ -125,6 +129,9 @@ public final class OAuth2ClientRegistrationAuthenticationProvider implements Aut
 
 		return new OAuth2ClientRegistrationAuthenticationToken(
 				(Authentication) clientRegistrationAuthentication.getPrincipal(), clientRegistration);
+		} finally {
+			RegistrationSourceHolder.clear();
+		}
 	}
 
 	@Override
