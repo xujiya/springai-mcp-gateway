@@ -148,7 +148,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { listClients, createClient as apiCreate, deleteClient as apiDelete } from '../api/admin.js'
 
-const PREREG_CLIENTS = ['springai-gateway-client', 'mcp-weather-client', 'mcp-climate-client']
+// PREREG_CLIENTS is now dynamic — derived from client.source === 'PRE-REGISTERED'
 
 export default {
   setup() {
@@ -201,7 +201,11 @@ export default {
       try { await apiDelete(c.clientId); await load() } catch {}
     }
 
-    function isPreregistered(id) { return PREREG_CLIENTS.includes(id) }
+    function isPreregistered(c) {
+      // Accept client object or string id
+      const client = typeof c === 'string' ? clients.value.find(cl => cl.clientId === c) : c
+      return client?.source === 'PRE-REGISTERED'
+    }
     function isLocalCallback(uri) { return uri.includes('localhost') || uri.includes('127.0.0.1') }
     function isClaudeCallback(uri) { return uri.includes('claude.ai') }
     function parseJson(str) {

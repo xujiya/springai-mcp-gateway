@@ -83,39 +83,28 @@
 
 <script>
 import { ref, onMounted, computed } from 'vue'
-import { getAuthServerMetadata } from '../api/admin.js'
+import { getAuthServerMetadata, listClients } from '../api/admin.js'
 
 export default {
   name: 'OAuthView',
   setup() {
     const asMetadata = ref(null)
 
-    const clients = [
-      {
-        id: 'springai-gateway-client',
-        clientId: 'springai-gateway-client',
-        name: 'Spring AI Gateway (预注册)',
-        authMethods: ['client_secret_post', 'client_secret_basic'],
-        grants: ['authorization_code', 'client_credentials', 'refresh_token'],
-        pkce: true,
-      },
-      {
-        id: 'mcp-weather-client',
-        clientId: 'mcp-weather-client',
-        name: 'Weather MCP 服务 (PKCE 公共客户端)',
-        authMethods: ['none'],
-        grants: ['authorization_code', 'refresh_token'],
-        pkce: true,
-      },
-      {
-        id: 'mcp-climate-client',
-        clientId: 'mcp-climate-client',
-        name: 'Climate MCP 服务 (PKCE 公共客户端)',
-        authMethods: ['none'],
-        grants: ['authorization_code', 'refresh_token'],
-        pkce: true,
-      },
-    ]
+    const clients = ref([])
+
+    async function loadClients() {
+      try {
+        const all = await listClients()
+        clients.value = all.map(c => ({
+          id: c.clientId,
+          clientId: c.clientId,
+          name: c.clientName || c.clientId,
+          authMethods: c.grantTypes?.includes('client_credentials') ? ['client_secret_post', 'client_secret_basic'] : ['none'],
+          grants: (c.grantTypes || '').split(',').map(s => s.trim()).filter(Boolean),
+          pkce: true,
+        }))
+      } catch {}
+    }
 
     const displayMetadata = computed(() => {
       if (!asMetadata.value) return {}
@@ -137,6 +126,7 @@ export default {
 
     onMounted(async () => {
       try { asMetadata.value = await getAuthServerMetadata() } catch {}
+      await loadClients()
     })
 
     return { asMetadata, displayMetadata, clients, isUrl }

@@ -2,8 +2,8 @@ package org.springaicommunity.mcp.security.authorizationserver.repository;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import lombok.RequiredArgsConstructor;
-import org.springaicommunity.mcp.security.authorizationserver.entity.SysUser;
-import org.springaicommunity.mcp.security.authorizationserver.mapper.SysUserMapper;
+import es.omarall.mcp.common.entity.SysUser;
+import es.omarall.mcp.common.mapper.SysUserMapper;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;

@@ -31,8 +31,8 @@ import java.util.Map;
  * <p>
  * Two filter chains:
  * <ol>
- *   <li><b>Admin chain (order=0)</b>: /admin/** — no JWT/API-Key filter,
- *       controller handles auth itself (sys_user login + adm- token)</li>
+ *   <li><b>Admin chain (order=0)</b>: /admin/** — JWT 验签（微服务原则：只认 token）
+ *       唯一豁免：/admin/login（登录后走 auth-server client_credentials 换 JWT）</li>
  *   <li><b>MCP chain (order=1)</b>: everything else — JWT + API Key dual auth</li>
  * </ol>
  */
@@ -55,7 +55,7 @@ public class SecurityConfiguration {
     }
 
     // ═══════════════════════════════════════════════════════════
-    // Chain 1: Admin console — no security filters, controller handles auth
+    // Chain 1: Admin console — JWT 验签（微服务原则），/admin/login 豁免
     // ═══════════════════════════════════════════════════════════
 
     @Bean
@@ -63,7 +63,10 @@ public class SecurityConfiguration {
     SecurityFilterChain adminSecurityFilterChain(HttpSecurity http) throws Exception {
         return http
                 .securityMatcher(new AntPathRequestMatcher("/admin/**"))
-                .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+                .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/admin/login").permitAll()
+                        .anyRequest().authenticated())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> {}))
                 .csrf(csrf -> csrf.disable())
                 .cors(cors -> cors.disable())
                 .build();
@@ -120,9 +123,6 @@ public class SecurityConfiguration {
             if (header != null && header.startsWith("Bearer ")) {
                 String token = header.substring(7).trim();
                 if (token.startsWith("ak-") && token.contains(":sk-")) {
-                    return null;
-                }
-                if (token.startsWith("adm-")) {
                     return null;
                 }
                 if (token.startsWith("mcp_sk_")) {

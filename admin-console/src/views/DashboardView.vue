@@ -104,7 +104,7 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
-import { listApiKeys, listClients, listUsers, checkMcpService } from '../api/admin.js'
+import { listApiKeys, listClients, listUsers, listServices, checkMcpService } from '../api/admin.js'
 
 export default {
   name: 'DashboardView',
@@ -117,14 +117,17 @@ export default {
       dcrEnabled: true,
     })
 
-    const services = ref([
-      { name: 'weather', icon: '🌤️', tools: ['getAlerts', 'getWeatherForecast'], status: 'checking' },
-      { name: 'climate', icon: '🌊', tools: ['getStormWarnings', 'getClimateForecast'], status: 'checking' },
-    ])
+    const services = ref([])
+    const svcIcons = { weather: '🌤️', climate: '🌊', order: '📦', ticket: '🎫', billing: '💰' }
 
     const activities = ref([])
 
-    const PREREG = ['springai-gateway-client', 'mcp-weather-client', 'mcp-climate-client']
+    async function getPreregClientIds() {
+      try {
+        const clients = await listClients()
+        return clients.filter(c => c.source === 'PRE-REGISTERED').map(c => c.clientId)
+      } catch { return [] }
+    }
 
     async function load() {
       // API Keys
@@ -139,8 +142,8 @@ export default {
       try {
         const clients = await listClients()
         stats.clientTotal = clients.length
-        stats.clientPrereg = clients.filter(c => PREREG.includes(c.clientId)).length
-        stats.clientDcr = clients.filter(c => !PREREG.includes(c.clientId)).length
+        stats.clientPrereg = clients.filter(c => c.source === 'PRE-REGISTERED').length
+        stats.clientDcr = clients.filter(c => c.source !== 'PRE-REGISTERED').length
         stats.clientPublic = clients.filter(c => !c.hasSecret).length
         stats.clientConfidential = clients.filter(c => c.hasSecret).length
       } catch {}
@@ -152,7 +155,20 @@ export default {
         stats.userEnabled = users.filter(u => u.enabled).length
       } catch {}
 
-      // Services
+      // Services (dynamic)
+      try {
+        const svcList = await listServices()
+        services.value = svcList.map(s => ({
+          name: s.name,
+          icon: svcIcons[s.name] || '🔌',
+          tools: [],
+          status: 'checking',
+        }))
+        stats.serviceTotal = svcList.length
+      } catch {}
+
+      const PREREG = await getPreregClientIds()
+
       let up = 0
       for (const svc of services.value) {
         const ok = await checkMcpService(svc.name)

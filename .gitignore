@@ -35,3 +35,25 @@ node_modules/
 browser-test*.cjs
 node_modules/
 admin-console/node_modules/
+
+# Temp/runtime files
+logs/
+*.log
+.access-token
+.auth-code
+.browser-cookie.txt
+.dcr-client
+.pkce-v
+haproxy.pid
+*-login-flash.mjs
+auth-info-check.mjs
+check-db.mjs
+consent-flow-*.mjs
+fix-tags.mjs
+migrate-db.mjs
+migrate-roles.mjs
+oauth-get-code.mjs
+pi-oauth-consent.mjs
+test-pi-flow.mjs
+verify-*.mjs
+bash.exe.stackdump

@@ -9,7 +9,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +20,6 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -47,8 +45,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class McpServiceRouterController {
 
-    /** Service name → backend URL (e.g. "weather" → "http://localhost:9092/mcp") */
-    private final Map<String, String> serviceUrls;
+    private final McpServiceRegistry registry;
 
     /** Public base URL of this gateway */
     private final String mcpServerPublicUrl;
@@ -59,19 +56,18 @@ public class McpServiceRouterController {
     private final HttpClient httpClient;
 
     public McpServiceRouterController(
-            Environment environment,
+            McpServiceRegistry registry,
             @Value("${ecso.mcp-server.public-url:http://localhost:8080/mcp-gateway}") String mcpServerPublicUrl,
             @Value("${ecso.auth-server.public-url:${spring.security.oauth2.resourceserver.jwt.issuer-uri}}") String authServerPublicUrl) {
 
+        this.registry = registry;
         this.mcpServerPublicUrl = mcpServerPublicUrl;
         this.authServerPublicUrl = authServerPublicUrl;
-        this.serviceUrls = resolveServiceUrls(environment);
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
 
-        log.info("MCP Service Router initialized with {} services: {}", serviceUrls.size(), serviceUrls.keySet());
-        serviceUrls.forEach((name, url) -> log.info("  /{}/mcp → {}", name, url));
+        log.info("MCP Service Router initialized with {} services: {}", registry.getServiceCount(), registry.getServiceNames());
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -108,10 +104,10 @@ public class McpServiceRouterController {
             HttpServletRequest request,
             HttpServletResponse response) throws IOException {
 
-        String backendUrl = serviceUrls.get(serviceName);
+        String backendUrl = registry.getBackendUrl(serviceName);
         if (backendUrl == null) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND,
-                    "Unknown MCP service: " + serviceName + ". Available: " + serviceUrls.keySet());
+                    "Unknown MCP service: " + serviceName + ". Available: " + registry.getServiceNames());
             return;
         }
 
@@ -195,7 +191,7 @@ public class McpServiceRouterController {
     public Map<String, Object> protectedResourceMetadata(
             @PathVariable String serviceName,
             jakarta.servlet.http.HttpServletRequest request) {
-        if (!serviceUrls.containsKey(serviceName)) {
+        if (!registry.hasService(serviceName)) {
             throw new IllegalArgumentException("Unknown MCP service: " + serviceName);
         }
 
@@ -238,37 +234,6 @@ public class McpServiceRouterController {
         } catch (java.net.URISyntaxException e) {
             return authServerPublicUrl; // fallback to configured value
         }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // Configuration Resolution
-    // ─────────────────────────────────────────────────────────────
-
-    private static Map<String, String> resolveServiceUrls(Environment environment) {
-        Map<String, String> result = new HashMap<>();
-
-        org.springframework.boot.context.properties.bind.Binder binder =
-                org.springframework.boot.context.properties.bind.Binder.get(environment);
-
-        var bound = binder.bind(
-                "ecso.mcp.services",
-                Map.class
-        );
-
-        if (bound.isBound()) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> connections = (Map<String, Object>) bound.get();
-            for (String name : connections.keySet()) {
-                String url = environment.getProperty(
-                        "ecso.mcp.services." + name + ".url");
-                if (url != null && !url.isBlank()) {
-                    result.put(name, url);
-                    log.info("Resolved MCP service '{}' → {}", name, url);
-                }
-            }
-        }
-
-        return Map.copyOf(result);
     }
 
     // ─────────────────────────────────────────────────────────────

@@ -70,10 +70,15 @@
 
 <script>
 import { ref, reactive, onMounted } from 'vue'
-import { getAdminToken, listClients, deleteClient } from '../api/admin.js'
+import { getAdminToken, listClients, listServices, deleteClient } from '../api/admin.js'
 import axios from 'axios'
 
-const PREREG = ['springai-gateway-client', 'mcp-weather-client', 'mcp-climate-client']
+    async function getPreregClientIds() {
+      try {
+        const clients = await listClients()
+        return clients.filter(c => c.source === 'PRE-REGISTERED').map(c => c.clientId)
+      } catch { return [] }
+    }
 const MCP_GW = '/mcp-gateway'
 
 export default {
@@ -115,15 +120,43 @@ export default {
         sys.accessTokenTTL = '24h'
       }
 
-      // Port check
+      // Port check — dynamic: infrastructure ports + per-service ports from /admin/services
+      const checks = [
+        { port: 8080, url: 'http://localhost:8080/mcp-gateway/weather/.well-known/oauth-protected-resource' },
+        { port: 8081, url: 'http://localhost:8081/ecso/auth/.well-known/oauth-authorization-server' },
+        { port: 8082, url: 'http://localhost:8082/weather/.well-known/oauth-protected-resource' },
+        { port: 9090, url: 'http://localhost:9090/.well-known/oauth-authorization-server' },
+      ]
+      // Add per-service backend ports from API
+      try {
+        const svcList = await listServices()
+        for (const svc of svcList) {
+          // Derive port from backendUrl (e.g. http://localhost:9092/mcp → 9092)
+          const m = svc.backendUrl.match(/:(\d+)\//)
+          if (m) {
+            const port = parseInt(m[1])
+            if (!checks.find(c => c.port === port)) {
+              checks.push({ port, url: svc.backendUrl })
+            }
+            // Also add to ports list if not present
+            if (!ports.value.find(p => p.port === port)) {
+              ports.value.push({ port, name: svc.name + '-server', ok: false })
+            }
+          }
+        }
+      } catch {}
       for (const p of ports.value) {
+        const check = checks.find(c => c.port === p.port)
+        if (!check) { p.ok = false; continue }
         try {
-          await fetch(`http://localhost:${p.port}/`, { method: 'HEAD', mode: 'no-cors', signal: AbortSignal.timeout(2000) })
+          const resp = await fetch(check.url, { mode: 'no-cors', signal: AbortSignal.timeout(2000) })
+          // no-cors: opaque response (type/status不可读) = request reached server = OK
+          // A network error would throw, so reaching here means the port is listening
           p.ok = true
         } catch { p.ok = false }
       }
 
-      // DCR count
+      const PREREG = await getPreregClientIds()
       try {
         const clients = await listClients()
         dcrCount.value = clients.filter(c => !PREREG.includes(c.clientId)).length

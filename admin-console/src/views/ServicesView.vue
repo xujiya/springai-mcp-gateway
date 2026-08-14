@@ -62,7 +62,7 @@
 
 <script>
 import { ref, onMounted } from 'vue'
-import { checkMcpService, getProtectedResourceMetadata } from '../api/admin.js'
+import { listServices, checkMcpService, getProtectedResourceMetadata } from '../api/admin.js'
 import axios from 'axios'
 
 const MCP_GW = '/mcp-gateway'
@@ -70,20 +70,27 @@ const MCP_GW = '/mcp-gateway'
 export default {
   name: 'ServicesView',
   setup() {
-    const services = ref([
-      {
-        name: 'weather', icon: '🌤️',
-        backendUrl: 'http://localhost:9092/mcp',
-        tools: ['getAlerts', 'getWeatherForecast'],
-        status: 'checking', testing: false, prm: null,
-      },
-      {
-        name: 'climate', icon: '🌊',
-        backendUrl: 'http://localhost:9093/mcp',
-        tools: ['getStormWarnings', 'getClimateForecast'],
-        status: 'checking', testing: false, prm: null,
-      },
-    ])
+    const services = ref([])
+    const svcIcons = { weather: '🌤️', climate: '🌊', order: '📦', ticket: '🎫', billing: '💰' }
+
+    async function loadServices() {
+      try {
+        const list = await listServices()
+        services.value = list.map(s => ({
+          name: s.name,
+          icon: svcIcons[s.name] || '🔌',
+          backendUrl: s.backendUrl,
+          tools: [],
+          status: 'checking',
+          testing: false,
+          prm: null,
+        }))
+      } catch {
+        // fallback
+        services.value = []
+      }
+      services.value.forEach(checkService)
+    }
 
     async function checkService(svc) {
       svc.status = 'checking'
@@ -120,9 +127,7 @@ export default {
       }
     }
 
-    onMounted(() => {
-      services.value.forEach(checkService)
-    })
+    onMounted(loadServices)
 
     return { services, testService }
   }

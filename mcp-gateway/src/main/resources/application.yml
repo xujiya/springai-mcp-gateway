@@ -35,6 +35,9 @@ spring:
               url: http://localhost:9092/mcp
             climate:
               url: http://localhost:9093/mcp
+            # 注意：此配置需与 ecso.mcp.services 保持同步
+            # order:
+            #   url: http://localhost:9094/mcp
         stdio:
           root-change-notification: false
           connections: {}
@@ -59,10 +62,17 @@ ecso:
         url: http://localhost:9092/mcp
       climate:
         url: http://localhost:9093/mcp
+      # ── 扩展示例：添加新 MCP 服务器只需追加配置 ──
+      # order:
+      #   url: http://localhost:9094/mcp
+      # ticket:
+      #   url: http://localhost:9095/mcp
+      # billing:
+      #   url: http://localhost:9096/mcp
     api-key:
       enabled: true
       header-name: X-API-Key
-      admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7
+      # admin-token 已移除 — admin API 现在走 JWT（auth-server client_credentials）
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

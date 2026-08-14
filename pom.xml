@@ -25,6 +25,7 @@
     </properties>
 
     <modules>
+        <module>mcp-common</module>
         <module>auth-server</module>
         <module>mcp-gateway</module>
         <module>weather-server</module>

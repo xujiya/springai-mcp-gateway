@@ -155,6 +155,11 @@ export async function getProtectedResourceMetadata(service) {
 
 // ─── MCP Service Status ──────────────────────────────────
 
+export async function listServices() {
+	const { data } = await api.get(`${ADMIN_API}/admin/services`);
+	return data;
+}
+
 export async function checkMcpService(service) {
 	try {
 		const { status } = await axios.get(

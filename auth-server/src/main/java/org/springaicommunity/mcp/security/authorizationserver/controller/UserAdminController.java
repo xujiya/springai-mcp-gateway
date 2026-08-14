@@ -23,8 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 
-import org.springaicommunity.mcp.security.authorizationserver.entity.SysUser;
-import org.springaicommunity.mcp.security.authorizationserver.mapper.SysUserMapper;
+import es.omarall.mcp.common.entity.SysUser;
+import es.omarall.mcp.common.mapper.SysUserMapper;
 
 /**
  * 用户管理 API（自定义用户 sys_user 的 CRUD）。

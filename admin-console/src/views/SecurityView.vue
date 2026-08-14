@@ -37,7 +37,7 @@
           </div>
           <div class="flow-box backend">
             <strong>MCP 后端</strong>
-            <small>:9092/:9093</small>
+            <small>{{ servicePorts }}</small>
           </div>
         </div>
 
@@ -99,11 +99,24 @@
 
 <script>
 import { ref, onMounted } from 'vue'
-import { getAdminToken, listApiKeys, getAuthServerMetadata } from '../api/admin.js'
+import { getAdminToken, listApiKeys, getAuthServerMetadata, listServices } from '../api/admin.js'
 
 export default {
   name: 'SecurityView',
   setup() {
+    const servicePorts = ref('')
+
+    onMounted(async () => {
+      try {
+        const svcs = await listServices()
+        const ports = [...new Set(svcs.map(s => {
+          const m = s.backendUrl.match(/:(\d+)\//)
+          return m ? ':' + m[1] : null
+        }).filter(Boolean))]
+        servicePorts.value = ports.join('/')
+      } catch {}
+    })
+
     const securityItems = ref([
       { icon: '🔑', label: 'AK 双部件模型', value: '已启用', level: 'ok' },
       { icon: '🔐', label: 'OAuth JWT', value: '已启用', level: 'ok' },
@@ -121,17 +134,17 @@ export default {
       { item: 'AK Secret bcrypt 存储', ok: true, detail: 'DelegatingPasswordEncoder + bcrypt (cost=10)' },
       { item: 'Admin Token bcrypt 验证', ok: true, detail: 'passwordEncoder.matches() timing-safe' },
       { item: 'DCR 两层客户端模型', ok: true, detail: 'DCR 客户端禁止 client_credentials' },
-      { item: 'PKCE 公共客户端', ok: true, detail: 'mcp-weather-client, mcp-climate-client' },
+      { item: 'PKCE 公共客户端', ok: true, detail: '见 OAuth 客户端列表' },
       { item: 'Per-service PRM', ok: true, detail: 'RFC 9728 每服务 Protected Resource Metadata' },
       { item: 'RFC 9728 host 匹配', ok: true, detail: 'PRM resource 动态匹配请求 host' },
       { item: 'CORS Origin:null', ok: true, detail: '浏览器表单 POST 不被拒' },
       { item: 'Session Cookie 限制', ok: true, detail: 'Path=/api-gateway/ecso/auth, SameSite=Lax, HttpOnly' },
       { item: 'TLS (HTTPS)', ok: false, detail: '开发环境未启用 — 生产必须开启', warn: true },
-      { item: '内部端口绑定 127.0.0.1', ok: false, detail: '9090/9092/9093 仍监听 0.0.0.0 — 生产需限制', warn: true },
+      { item: '内部端口绑定 127.0.0.1', ok: false, detail: '后端端口仍监听 0.0.0.0 — 生产需限制', warn: true },
       { item: '默认 admin 密码', ok: false, detail: 'admin/admin 仅开发用 — 生产需修改', warn: true },
     ])
 
-    return { securityItems, checks }
+    return { securityItems, checks, servicePorts }
   }
 }
 </script>
