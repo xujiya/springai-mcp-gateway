@@ -6,7 +6,8 @@ spring:
   application:
     name: springai-mcp-gateway
   datasource:
-    url: jdbc:mysql://localhost:3306/mcp_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: >-
+      jdbc:mysql://localhost:3306/mcp_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
     password: xujiya
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -16,11 +17,11 @@ spring:
   ai:
     mcp:
       server:
-        enabled: false      # No MCP server endpoint — gateway is pure proxy, not an MCP server
+        enabled: false
         protocol: streamable
         name: ${spring.application.name}
       client:
-        enabled: false       # No MCP client aggregation — use transparent proxy via McpServiceRouterController
+        enabled: false
         name: mcp-client
         version: 1.0.0
         toolcallback:
@@ -37,56 +38,6 @@ spring:
         stdio:
           root-change-notification: false
           connections: {}
-        #  stdio:
-        #    root-change-notification: false
-        #    connections:
-        #      memory:
-        #        command: docker
-        #        args:
-        #          - run
-        
-        #          - -i
-        #          - --rm
-        #          - --volume
-        #          - /home/omar/.mcp-memory-data:/data
-        #          - mcp/memory
-        #          - /data
-        #        env:
-        #          MEMORY_STORAGE_PATH: /data
-        #          MEMORY_MAX_ENTRIES: "10000"
-        #      #            duckduckgo:
-        #      #              command: docker
-        #      #              args:
-        #      #                - run
-        #      #                - -i
-        #      #                - --rm
-        #      #                - mcp/duckduckgo
-        #      #            paper-search:
-        #      #              command: docker
-        #      #              args:
-        #      #                - run
-        #      #                - -i
-        #      #                - --rm
-        #      #                - mcp/paper-search
-        #      #              env:
-        #      #                PAPER_SEARCH_TIMEOUT_SECONDS: "30"
-        #      sequential-thinking:
-        #        command: docker
-        #        args:
-        #          - run
-        #          - -i
-        #          - --rm
-        #          - mcp/sequentialthinking
-        #  #            mcp-fetch:
-        #  #              command: docker
-        #  #              args:
-        #  #                - run
-        #  #                - -i
-        #  #                - --rm
-        #  #                - mcp/fetch
-        #  #              env:
-        #  #                FETCH_MAX_REQUESTS_PER_MINUTE: "30"
-        #  #                FETCH_TIMEOUT_SECONDS: "30"
   security:
     oauth2:
       resourceserver:
@@ -95,6 +46,9 @@ spring:
           jwk-set-uri: http://localhost:9090/oauth2/jwks
 
 ecso:
+  cors:
+    allowed-origins: >-
+      https://dev.omarall.es,http://app.omarall.es:*,http://app.omarall.es:8080
   auth-server:
     public-url: http://localhost:8080/api-gateway/ecso/auth
   mcp-server:
@@ -107,9 +61,8 @@ ecso:
         url: http://localhost:9093/mcp
     api-key:
       enabled: true
-      header-name: X-API-Key          # Header name for API Key (format: ak-xxx:sk-yyy)
-      admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7  # Admin Bearer token for CRUD API (dev mode)
-      # admin-token-hash: {bcrypt}$2a$10$...  # Production: use bcrypt hash instead of plaintext
+      header-name: X-API-Key
+      admin-token: adm-a4596ca59d33d7cd005c2367a0c657c7
 
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml

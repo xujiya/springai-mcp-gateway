@@ -122,7 +122,7 @@ public class AdminConsoleController {
         if (!isAdmin(auth)) return unauthorized("invalid_admin_token");
         List<Map<String, Object>> result = clientMapper.selectList(null).stream().map(c -> {
             Map<String, Object> m = new HashMap<>();
-            m.put("id", c.getId());
+            m.put("id", String.valueOf(c.getId()));
             m.put("clientId", c.getClientId());
             m.put("clientName", c.getClientName());
             m.put("issuedAt", c.getClientIdIssuedAt() != null ? c.getClientIdIssuedAt().toString() : null);
@@ -143,7 +143,7 @@ public class AdminConsoleController {
         if (!isAdmin(auth)) return unauthorized("invalid_admin_token");
         List<Map<String, Object>> result = userMapper.selectList(null).stream().map(u -> {
             Map<String, Object> m = new HashMap<>();
-            m.put("id", u.getId());
+            m.put("id", String.valueOf(u.getId()));
             m.put("username", u.getUsername());
             m.put("roles", u.getRoles());
             m.put("enabled", u.getEnabled());
@@ -177,7 +177,7 @@ public class AdminConsoleController {
         userMapper.insert(user);
         log.info("Admin 创建用户: username={}, roles={}", username, user.getRoles());
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Map.of("id", user.getId(), "username", username, "roles", user.getRoles()));
+                .body(Map.of("id", String.valueOf(user.getId()), "username", username, "roles", user.getRoles()));
     }
 
     @PutMapping(value = "/users/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -191,7 +191,7 @@ public class AdminConsoleController {
         if (body.containsKey("roles")) user.setRoles(normalizeRoles(body.get("roles")));
         if (body.containsKey("enabled")) user.setEnabled((Boolean) body.get("enabled"));
         userMapper.updateById(user);
-        return ResponseEntity.ok(Map.of("id", id, "username", user.getUsername(), "roles", user.getRoles()));
+        return ResponseEntity.ok(Map.of("id", String.valueOf(id), "username", user.getUsername(), "roles", user.getRoles()));
     }
 
     @DeleteMapping(value = "/users/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
@@ -216,7 +216,7 @@ public class AdminConsoleController {
 
         List<Map<String, Object>> result = apiKeyMapper.selectList(null).stream().map(k -> {
             Map<String, Object> m = new HashMap<>();
-            m.put("id", k.getId());
+            m.put("id", String.valueOf(k.getId()));
             m.put("name", k.getName());
             m.put("accessKeyId", k.getAccessKeyId());
             m.put("accessKeyPrefix", k.getAccessKeyPrefix());
@@ -252,6 +252,7 @@ public class AdminConsoleController {
 
         log.info("Admin 创建 API Key: name={}, id={}, token=mcp_sk_...", body.get("name"), result.accessKeyId());
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
+                "id", String.valueOf(result.entity().getId()),
                 "accessKeyId", result.accessKeyId(),
                 "accessKeySecret", result.accessKeySecret(),
                 "token", result.token(),

@@ -1,11 +1,16 @@
 package es.omarall.mcp.gateway;
 
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
 import jakarta.servlet.http.HttpServletRequest;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.core.Ordered;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -14,10 +19,9 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,6 +46,14 @@ public class SecurityConfiguration {
     @Value("${ecso.mcp-server.public-url:http://localhost:8080/mcp-gateway}")
     private String mcpServerPublicUrl;
 
+    @Value("${ecso.cors.allowed-origins:}")
+    private String corsOriginsConfig;
+
+    private List<String> getCorsOrigins() {
+        if (corsOriginsConfig == null || corsOriginsConfig.isBlank()) return List.of();
+        return Arrays.stream(corsOriginsConfig.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList();
+    }
+
     // ═══════════════════════════════════════════════════════════
     // Chain 1: Admin console — no security filters, controller handles auth
     // ═══════════════════════════════════════════════════════════
@@ -53,7 +65,7 @@ public class SecurityConfiguration {
                 .securityMatcher(new AntPathRequestMatcher("/admin/**"))
                 .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors -> cors.disable())
                 .build();
     }
 
@@ -70,6 +82,8 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(auth -> auth
                         // RFC 9728: PRM endpoints are public
                         .requestMatchers("/*/.well-known/oauth-protected-resource").permitAll()
+                        // Error forwarding must be permitted (Spring forwards to /error on backend failures)
+                        .requestMatchers("/error").permitAll()
                         // All MCP proxy endpoints require a valid token (JWT or API Key)
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(oauth2 -> oauth2
@@ -79,7 +93,7 @@ public class SecurityConfiguration {
                         .authenticationEntryPoint(
                                 new ServiceAwareBearerEntryPoint(this.mcpServerPublicUrl)))
                 .csrf(csrf -> csrf.disable())
-                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+                .cors(cors -> cors.disable())
                 .addFilterBefore(apiKeyFilter,
                         org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter.class)
                 .addFilterAfter(new PublicUrlFilter(8082, this.mcpServerPublicUrl),
@@ -120,16 +134,26 @@ public class SecurityConfiguration {
         };
     }
 
-    private CorsConfigurationSource corsConfigurationSource() {
+    /**
+     * Global CORS filter — registered at HIGHEST_PRECEDENCE so it runs
+     * before Spring Security filters.
+     */
+    @Bean
+    FilterRegistrationBean<org.springframework.web.filter.CorsFilter> corsFilterRegistration() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*", "null"));
+        var origins = new ArrayList<>(List.of("http://localhost:*", "http://127.0.0.1:*", "null"));
+        origins.addAll(getCorsOrigins());
+        config.setAllowedOriginPatterns(origins);
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
         config.setMaxAge(3600L);
 
-        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        var source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);
-        return source;
+        var registration = new FilterRegistrationBean<>(
+                new org.springframework.web.filter.CorsFilter(source));
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE);
+        return registration;
     }
 }

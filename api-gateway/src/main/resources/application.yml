@@ -14,15 +14,16 @@ spring:
       preserve-host-header: true
       routes:
         # ─── RFC 8414 well-known-first 形式 ───
-        # 部分 MCP 客户端使用 <origin>/.well-known/oauth-authorization-server/<issuer-path>
-        # 来发现 AS 元数据。该路由将请求重写到标准 .well-known 路径后
-        # 转发到 auth-server，统一走网关出网。
+        # MCP clients use
+        # <origin>/.well-known/oauth-authorization-server/<issuer-path>
+        # to discover AS metadata. Rewrites to standard .well-known path.
         - id: rfc8414-well-known-first
           uri: http://localhost:9090
           predicates:
             - Path=/.well-known/oauth-authorization-server/**
           filters:
-            - RewritePath=/.well-known/oauth-authorization-server/.*, /.well-known/openid-configuration
+            - RewritePath=/.well-known/oauth-authorization-server/.*,
+              /.well-known/openid-configuration
             - RewriteAuthUrls=http://localhost:9090,http://localhost:8080/api-gateway/ecso/auth
 
         # ─── Auth Server 路由 ───
@@ -70,9 +71,15 @@ spring:
           filters:
             - StripPrefix=2
             # response filter 按声明倒序执行: vue-consent/vue-login 后声明=先匹配, 9090/ 兼底
-            - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
-            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
-            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-consent, http://localhost:8080/api-gateway/ecso/vue/consent
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/,
+              http://localhost:8080/api-gateway/ecso/auth/
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/vue-login,
+              http://localhost:8080/api-gateway/ecso/vue/
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/vue-consent,
+              http://localhost:8080/api-gateway/ecso/vue/consent
 
         # ⑤ Login POST — 公开 (登录成功后 302 重定向)
         - id: auth-login
@@ -81,8 +88,12 @@ spring:
             - Path=/ecso/auth/login
           filters:
             - StripPrefix=2
-            - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
-            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/,
+              http://localhost:8080/api-gateway/ecso/auth/
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/vue-login,
+              http://localhost:8080/api-gateway/ecso/vue/
 
         # ⑥ auth-info API — 公开
         - id: auth-info
@@ -143,7 +154,8 @@ spring:
           predicates:
             - Path=/ecso/admin/**
           filters:
-            - RewritePath=/ecso/admin/(?<path>.*), /api-gateway/ecso/admin/$\{path}
+            - RewritePath=/ecso/admin/(?<path>.*),
+              /api-gateway/ecso/admin/$\{path}
 
         # ⑩ 兜底: 其他 /ecso/auth/** 需认证 (也可能返回 302)
         - id: auth-other
@@ -153,10 +165,17 @@ spring:
           filters:
             - StripPrefix=2
             - RewriteAuthUrls=http://localhost:9090,http://localhost:8080/api-gateway/ecso/auth
-            - RewriteResponseHeader=Location, ^http://localhost:9090/, http://localhost:8080/api-gateway/ecso/auth/
-            - RewriteResponseHeader=Location, ^http://localhost:9090/vue-login, http://localhost:8080/api-gateway/ecso/vue/
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/,
+              http://localhost:8080/api-gateway/ecso/auth/
+            - RewriteResponseHeader=Location,
+              ^http://localhost:9090/vue-login,
+              http://localhost:8080/api-gateway/ecso/vue/
 
 ecso:
+  cors:
+    allowed-origins: >-
+      https://dev.omarall.es,http://app.omarall.es:*,http://app.omarall.es:8080
   whitelist:
     paths:
       - /.well-known/oauth-authorization-server/**

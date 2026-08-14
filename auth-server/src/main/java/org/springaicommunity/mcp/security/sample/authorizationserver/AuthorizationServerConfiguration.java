@@ -107,18 +107,26 @@ class AuthorizationServerConfiguration {
 		);
 	}
 
+	@Value("${ecso.cors.allowed-origins:}")
+	private String corsOriginsConfig;
+
 	public CorsConfigurationSource corsConfigurationSource() {
 		CorsConfiguration configuration = new CorsConfiguration();
-		// Restrict CORS to known frontend origins (not wildcard in production)
-		configuration.setAllowedOriginPatterns(List.of(
+		// Base dev origins + configured production domains
+		var origins = new java.util.ArrayList<>(java.util.List.of(
 				"http://localhost:*",      // dev: Vue + nginx
 				"http://127.0.0.1:*",      // dev: loopback
 				"null"                     // W3C opaque origin: form submit after redirect
-				// Production: add "https://your-domain.com"
 		));
+		if (corsOriginsConfig != null && !corsOriginsConfig.isBlank()) {
+			origins.addAll(java.util.Arrays.stream(corsOriginsConfig.split(","))
+					.map(String::trim).filter(s -> !s.isEmpty()).toList());
+		}
+		configuration.setAllowedOriginPatterns(origins);
 		configuration.setAllowedMethods(List.of("*"));
 		configuration.setAllowedHeaders(List.of("*"));
 		configuration.setAllowCredentials(true);
+		configuration.setMaxAge(3600L);
 
 		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
 		source.registerCorsConfiguration("/**", configuration);

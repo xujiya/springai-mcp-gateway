@@ -7,24 +7,30 @@ server:
         name: MCP_AUTHORIZATION_SERVER_SESSIONID
         path: /api-gateway/ecso/auth
         http-only: true
-        secure: false          # 开发HTTP; 生产改true
+        secure: false # 开发HTTP; 生产改true
         same-site: lax
 
 # MCP DCR (Dynamic Client Registration) security settings
 # These apply to clients registered via POST /oauth2/register
 mcp:
   dcr:
-    enabled: true                # 开发模式: 开DCR, 支持动态注册
-    client-secret-expires-in: 90d    # How long DCR client secrets remain valid (default: 90d)
-    access-token-time-to-live: 24h   # Access token TTL for DCR-registered clients (default: 5m)
-    refresh-token-time-to-live: 1h   # Refresh token TTL for DCR-registered clients (default: 1h)
+    enabled: true # DCR\u5f00\u5173
+    client-secret-expires-in: 90d
+    access-token-time-to-live: 24h
+    refresh-token-time-to-live: 1h
+
+ecso:
+  cors:
+    allowed-origins: >-
+      https://dev.omarall.es,http://app.omarall.es:*,http://app.omarall.es:8080
 
 spring:
   application:
     name: auth-server
 
   datasource:
-    url: jdbc:mysql://localhost:3306/mcp_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: >-
+      jdbc:mysql://localhost:3306/mcp_auth?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: root
     password: xujiya
     driver-class-name: com.mysql.cj.jdbc.Driver
